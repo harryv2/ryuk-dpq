@@ -1,1 +1,15 @@
 .idea
+
+.extras
+# runtime data: write-ahead logs, postgres, etcd
+/data/
+
+/data-it/
+
+.DS_Store
+
+.next
+
+node_modules
+
+frontend/out

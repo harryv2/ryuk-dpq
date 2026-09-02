@@ -1,39 +1,28 @@
 # LLD 1 — Queue Engine
 
-The core data structures and algorithms. Everything else in the system is transport
-or coordination around this.
+The core data structures and algorithms. Everything else in the system is transport or
+coordination around this.
 
-Implements: HLD Sections 3, 7, 8, 12, 13, 14.
+Implements HLD sections 3, 4, 9, 10, 14, 15 and 16.
 
 ---
 
-## 1. Package layout
+## 1. Position
 
 ```
-internal/
-  queue/            ← this document
-    priority.go     Priority type, bands, bitmap
-    message.go      Message, Receipt, errors
-    deque.go        ring deque used by bands and groups
-    group.go        group state
-    slot.go         slot: bands, groups, in-flight, timers
-    queue.go        Queue: slot set, dispatch, config
-    dispatch.go     priority selection and the starvation reserve
-    sweep.go        lease expiry, TTL, delayed release
-    clock.go        Clock interface, system and fake
-  wal/              LLD 2
-  node/             LLD 3
-  gateway/          LLD 4
-  meta/             LLD 5
-  metrics/          LLD 6
-cmd/
-  ryuk-node/
-  ryuk-gateway/
+internal/queue/logic/engine/     ← this document
+    priority.go   message.go   deque.go    group.go
+    slot.go       queue.go     dispatch.go sweep.go
+    stats.go      cluster.go   journal.go  clock.go
 ```
 
-`internal/queue` has no imports outside the standard library. It knows nothing about
-HTTP, RPC, Postgres, or etcd. That is what lets the test suite drive it directly at
-full speed with no transport in the way.
+**The engine imports nothing outside the standard library.** No HTTP, no gRPC, no
+Postgres, no etcd, no logging framework. That is what lets the concurrency tests run
+the real production code path at full speed with no transport, no disk and no real
+clock.
+
+Everything it needs from the outside arrives through three small interfaces: `Clock`,
+`Journal` and `Cluster`.
 
 ---
 
@@ -53,10 +42,16 @@ const (
 )
 
 func (p Priority) Valid() bool { return p <= MaxPriority }
+func bucketOf(p Priority) int  { // 0 low, 1 medium, 2 high — for metrics
+    switch {
+    case p <= 33: return 0
+    case p <= 66: return 1
+    default:      return 2
+    }
+}
 ```
 
-`HIGH`/`MEDIUM`/`LOW` are parsed at the API edge into these values. The engine only
-ever sees numbers.
+`HIGH`/`MEDIUM`/`LOW` are parsed at the API edge. The engine only sees numbers.
 
 ### 2.2 Queue key
 
@@ -65,13 +60,10 @@ type QueueKey struct {
     Org  string
     Name string
 }
-
-func (k QueueKey) String() string { return k.Org + "/" + k.Name }
 ```
 
-A queue is identified by org and name together. The engine treats the pair as opaque
-— it never parses either half — but the pair is what the slot and
-placement-group hashes are salted with, so two orgs using the same queue name never share a slot.
+The engine treats the pair as opaque and never parses either half, but it is what the
+slot hash is salted with, so two orgs using the same queue name never share a slot.
 
 ### 2.3 Message
 
@@ -81,7 +73,7 @@ type Message struct {
     Payload      []byte
     Priority     Priority
     GroupID      string      // "" means the message is its own group
-    Seq          uint64      // queue-wide submission order
+    Seq          uint64      // (generation << 40) | counter
     EnqueuedAt   time.Time
     ExpiresAt    time.Time   // zero: no TTL
     DeliverAfter time.Time   // zero: available immediately
@@ -93,9 +85,16 @@ func (m *Message) expired(now time.Time) bool {
 }
 ```
 
-`Seq` comes from one counter per queue, assigned at enqueue. It exists only to
-compare messages of equal priority sitting in different slots (HLD §12). It is not
-used for ordering inside a group — that is positional.
+`Seq` orders messages of equal priority sitting in different slots. It is **not** used
+for ordering inside a group — that is positional.
+
+The **generation prefix** matters. A queue that changes owner gets a new generation, so
+two owners can never hand out overlapping sequence numbers, and messages merged back
+from an older owner sort before anything the new owner accepted (HLD §7, §12).
+
+`EnqueuedAt` and `ExpiresAt` are stamped once, by the node that accepts the message,
+and written into the log record. Replay reads them rather than recomputing, which is
+what makes replay deterministic.
 
 ### 2.4 Receipt
 
@@ -103,19 +102,18 @@ used for ordering inside a group — that is positional.
 type Receipt struct {
     Slot        uint16
     MessageID   string
-    Epoch       uint64   // lease generation, rejects a stale ack
-    Incarnation uint64   // restart generation, rejects an ack from before a replay
+    Epoch       uint64   // lease generation — rejects a stale ack
+    Incarnation uint64   // restart generation — rejects an ack from before a replay
 }
 ```
 
-`Epoch` counts leases within one run of the process. `Incarnation` counts runs.
+`Epoch` counts leases within one run. `Incarnation` counts runs.
 
-Both are needed. After a crash the engine replays its log and `epochSeq` restarts
-from zero, so a receipt issued before the crash could match a generation issued
-after it — and an acknowledgment for a long-dead delivery would delete a message
-another worker is actively processing. The incarnation is read from the log at
-startup, incremented, and written back, so any receipt from an earlier run is
-rejected outright.
+**Both are needed.** After a crash the engine replays and `epochSeq` restarts from
+zero, so a receipt issued before the crash could match a generation issued after it,
+and an acknowledgment for a long-dead delivery would delete a message another worker is
+actively processing. The incarnation is read from the journal at startup, incremented,
+written back, and any receipt from an earlier run is rejected outright.
 
 ### 2.5 Errors
 
@@ -126,6 +124,7 @@ var (
     ErrBadReceipt   = errors.New("queue: malformed receipt")
     ErrBadPriority  = errors.New("queue: priority out of range")
     ErrQueueFull    = errors.New("queue: at maxDepth")
+    ErrFrozen       = errors.New("queue: frozen, migrating")
 )
 ```
 
@@ -133,7 +132,7 @@ var (
 
 ## 3. The deque
 
-Bands and groups are both FIFO. One type serves both.
+Bands and groups are both first-in-first-out. One type serves both.
 
 ```go
 type deque[T any] struct {
@@ -141,9 +140,8 @@ type deque[T any] struct {
     head int
 }
 
-func (d *deque[T]) len() int  { return len(d.buf) - d.head }
+func (d *deque[T]) len() int    { return len(d.buf) - d.head }
 func (d *deque[T]) empty() bool { return d.len() == 0 }
-
 func (d *deque[T]) pushBack(v T) { d.buf = append(d.buf, v) }
 
 func (d *deque[T]) pushFront(v T) {
@@ -159,7 +157,7 @@ func (d *deque[T]) popFront() (v T, ok bool) {
     if d.head == len(d.buf) { return v, false }
     v = d.buf[d.head]
     var zero T
-    d.buf[d.head] = zero        // release the reference so GC can collect
+    d.buf[d.head] = zero                    // drop the reference so GC can collect
     d.head++
     if d.head > 32 && d.head*2 >= len(d.buf) {
         d.buf = append(d.buf[:0], d.buf[d.head:]...)
@@ -174,17 +172,16 @@ func (d *deque[T]) front() (v T, ok bool) {
 }
 ```
 
-Two details that matter.
+Two details matter.
 
 **Zeroing on pop.** Without it the backing array keeps pointers to popped messages
 alive and a busy queue leaks memory in proportion to throughput.
 
-**Compaction on pop.** `d.buf[d.head:]` alone never reclaims the front of the array.
-Copying down once the dead prefix is half the array keeps it amortised O(1) with
-bounded waste.
+**Compaction on pop.** Advancing `head` alone never reclaims the front of the array.
+Copying down once the dead prefix is half the array keeps it amortised O(1).
 
-`pushFront` on a full front is O(n), but it only happens on retry, and only when the
-group has never been popped from — rare enough not to matter.
+`pushFront` on a full front is O(n), but it happens only on retry, and only when the
+group has never been popped from.
 
 ---
 
@@ -201,12 +198,12 @@ type group struct {
 }
 ```
 
-A group with no `groupID` is created with `id = message.ID`, so it contains exactly
-one message and can never block anything.
+A group with no `groupID` is created with `id = message.ID`, so it holds exactly one
+message and can never block anything.
 
-`version` is the mechanism that avoids removing entries from the middle of a band
-deque. A band entry is valid only if its recorded version matches the group's current
-version. Bumping the version makes every older entry dead without touching them.
+`version` avoids removing entries from the middle of a band deque. A band entry is
+valid only if its version matches the group's current version, so bumping the version
+kills every older entry without touching them.
 
 ---
 
@@ -218,7 +215,7 @@ type slot struct {
 
     mu       sync.Mutex
     bandMask [2]uint64                        // which priorities are non-empty
-    bands    map[Priority]*deque[bandEntry]   // only priorities actually in use
+    bands    map[Priority]*deque[bandEntry]   // only priorities in use
     groups   map[string]*group
     inflight map[string]*lease
     timers   timerHeap
@@ -231,10 +228,7 @@ type slot struct {
     headSeq atomic.Uint64   // Seq of the head message in that band
 }
 
-type bandEntry struct {
-    g   *group
-    ver uint64
-}
+type bandEntry struct { g *group; ver uint64 }
 
 type lease struct {
     msg      *Message
@@ -244,26 +238,20 @@ type lease struct {
 }
 ```
 
-One lock covers everything above it. Rationale in HLD §8: handing out a message
-mutates five structures and they must move together.
+One lock covers everything above it. Handing out a message mutates five structures and
+they must move together (HLD §10).
 
-**A slot belongs to one queue, and therefore to one org.** Nothing above is ever
-shared between tenants, so no hash collision can put two orgs behind the same mutex.
+**A slot belongs to one queue, and therefore to one org.** Nothing here is shared
+between tenants, so no hash collision can put two orgs behind the same mutex.
 
-**All 16 slots of a normal queue are in this process**, so the dispatcher in §8 can
-compare every one of them. That is what makes priority and FIFO exact rather than
-best-effort.
+**Why `bands` is a map and not `[101]deque`.** A dense array costs 101 deque headers —
+3,232 bytes — per slot, allocated whether used or not. Real queues use a handful of
+priorities, so nearly all of it is waste, and it is paid 16 times per queue. A map costs
+about 200 bytes for three priorities and shrinks when they empty.
 
-**Why `bands` is a map and not `[101]deque`.** A dense array costs 101 deque headers
-— 3,232 bytes — per slot, allocated whether used or not. Real queues use a handful of
-distinct priorities, so almost all of it is waste, and it is paid 16 times per queue.
-At a million queues that is 218 GB of empty arrays before a single message exists. A
-map costs about 200 bytes for three priorities and shrinks when they empty.
-
-The bitmap stays dense, because it is 16 bytes and it is what makes selection
-constant time. The map is only consulted after the bitmap has already named the
-priority, so the extra cost is one map lookup (~20 ns) on a path whose next step is a
-network hop.
+The bitmap stays dense because it is 16 bytes and it is what makes selection constant
+time. The map is consulted only after the bitmap names the priority, so the extra cost
+is one map lookup on a path whose next step is a network hop.
 
 ### 5.1 Bitmap
 
@@ -273,22 +261,22 @@ func (s *slot) clearBand(p Priority) { s.bandMask[p>>6] &^= 1 << (p & 63) }
 
 func (s *slot) highestBand() (Priority, bool) {
     if w := s.bandMask[1]; w != 0 {
-        return Priority(127 - bits.LeadingZeros64(w)), true    // covers 64..100
+        return Priority(127 - bits.LeadingZeros64(w)), true    // 64..100
     }
     if w := s.bandMask[0]; w != 0 {
-        return Priority(63 - bits.LeadingZeros64(w)), true     // covers 0..63
+        return Priority(63 - bits.LeadingZeros64(w)), true     // 0..63
     }
     return 0, false
 }
 ```
 
-Word 1 holds priorities 64–100, word 0 holds 0–63. Two instructions, constant time
-regardless of how many priority levels exist.
+Word 1 holds priorities 64–100, word 0 holds 0–63. Constant time regardless of how many
+priority levels exist.
 
-**The bitmap is a superset.** A set bit means the band deque is non-empty; it does
-not mean the band will yield a message, because the entries may all be stale or
-belong to locked groups. There are never false negatives, so nothing is ever missed.
-Callers handle a band that yields nothing by moving to the next one.
+**The bitmap is a superset.** A set bit means the band deque is non-empty; it does not
+mean the band will yield a message, because entries may be stale or their groups locked.
+There are never false negatives, so nothing is missed. A band that yields nothing is
+handled by moving to the next.
 
 ### 5.2 Band membership
 
@@ -302,10 +290,7 @@ func (s *slot) pushGroup(g *group) {
     g.inBand = true
 
     d := s.bands[m.Priority]
-    if d == nil {
-        d = &deque[bandEntry]{}
-        s.bands[m.Priority] = d
-    }
+    if d == nil { d = &deque[bandEntry]{}; s.bands[m.Priority] = d }
     d.pushBack(bandEntry{g: g, ver: g.version})
     s.setBand(m.Priority)
     s.refreshHint()
@@ -318,13 +303,9 @@ func (s *slot) takeGroup(p Priority) *group {
     for {
         e, ok := d.popFront()
         if !ok { break }
-        if e.ver != e.g.version {
-            continue                 // stale entry, the group moved or was taken
-        }
-        e.g.inBand = false           // this was the live entry
-        if e.g.locked || e.g.msgs.empty() {
-            continue
-        }
+        if e.ver != e.g.version { continue }   // stale: the group moved or was taken
+        e.g.inBand = false                     // this was the live entry
+        if e.g.locked || e.g.msgs.empty() { continue }
         if d.empty() { s.dropBand(p) }
         return e.g
     }
@@ -339,10 +320,10 @@ func (s *slot) dropBand(p Priority) {
 }
 ```
 
-Setting `inBand = false` **only after** the version check is load-bearing. A stale
-entry means the group already has a newer live entry elsewhere; clearing the flag
-there would let `pushGroup` add a second one, and the group would be dispatched
-twice.
+Setting `inBand = false` **only after** the version check is load-bearing. A stale entry
+means the group already has a newer live entry elsewhere; clearing the flag there would
+let `pushGroup` add a second one, and the group would be dispatched twice — the same
+message to two workers.
 
 ---
 
@@ -355,27 +336,26 @@ twice.
 func (s *slot) enqueue(m *Message, now time.Time) {
     if !m.DeliverAfter.IsZero() && m.DeliverAfter.After(now) {
         heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
+        s.st.delayed++
         return
     }
     gid := m.GroupID
     if gid == "" { gid = m.ID }
 
     g := s.groups[gid]
-    if g == nil {
-        g = &group{id: gid}
-        s.groups[gid] = g
-    }
+    if g == nil { g = &group{id: gid}; s.groups[gid] = g }
     g.msgs.pushBack(m)
-    s.st.enqueued++
 
-    if !g.locked && !g.inBand {
-        s.pushGroup(g)
-    }
+    s.st.enqueued++
+    s.st.ready[bucketOf(m.Priority)]++
+    s.st.bytes += int64(len(m.Payload))
+
+    if !g.locked && !g.inBand { s.pushGroup(g) }
 }
 ```
 
 O(1). A group already in a band or already locked needs no band work — its existing
-entry or its eventual unlock will pick the message up.
+entry, or its eventual unlock, picks the message up.
 
 ### 6.2 Take
 
@@ -389,7 +369,7 @@ func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Rec
     for {
         v, ok := g.msgs.popFront()
         if !ok { break }
-        if v.expired(now) { s.st.expired++; continue }
+        if v.expired(now) { s.retireExpired(v); continue }
         m = v
         break
     }
@@ -405,14 +385,19 @@ func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Rec
     l := &lease{msg: m, g: g, epoch: s.epochSeq, deadline: now.Add(vis)}
     s.inflight[m.ID] = l
     heap.Push(&s.timers, timerEntry{id: m.ID, epoch: l.epoch, at: l.deadline})
+
+    s.st.ready[bucketOf(m.Priority)]--
+    s.st.inflight++
     s.refreshHint()
 
     return m, Receipt{Slot: s.id, MessageID: m.ID, Epoch: l.epoch}, true
 }
 ```
 
-TTL is checked here rather than by a scan, so an expired message costs one pop.
-The active TTL sweep in §7.2 exists for the metrics, not for correctness.
+TTL is checked here rather than by a scan, so an expired message costs one pop. The
+active TTL sweep exists to keep the oldest-age metric honest, not for correctness.
+
+`Incarnation` is filled by the layer above, which owns it.
 
 ### 6.3 Acknowledge
 
@@ -420,14 +405,13 @@ The active TTL sweep in §7.2 exists for the metrics, not for correctness.
 // caller holds s.mu
 func (s *slot) ack(r Receipt) error {
     l, ok := s.inflight[r.MessageID]
-    if !ok {
-        return ErrNotInFlight       // already acked, dead-lettered, or never existed
-    }
-    if l.epoch != r.Epoch {
-        return ErrLeaseExpired      // redelivered; do NOT delete the new delivery
-    }
+    if !ok  { return ErrNotInFlight }   // already acked, dead-lettered, or never existed
+    if l.epoch != r.Epoch { return ErrLeaseExpired }   // redelivered — do not delete
+
     delete(s.inflight, r.MessageID)
+    s.st.inflight--
     s.st.acked++
+    s.st.bytes -= int64(len(l.msg.Payload))
     s.unlock(l.g)
     return nil
 }
@@ -435,40 +419,22 @@ func (s *slot) ack(r Receipt) error {
 // caller holds s.mu
 func (s *slot) unlock(g *group) {
     g.locked = false
-    if g.msgs.empty() {
-        s.dropGroupIfIdle(g)
-        return
-    }
-    if !g.inBand { s.pushGroup(g) }
+    if g.msgs.empty() { s.dropGroupIfIdle(g); return }
+    if !g.inBand      { s.pushGroup(g) }
 }
 
 // caller holds s.mu
 func (s *slot) dropGroupIfIdle(g *group) {
-    if !g.locked && g.msgs.empty() && !g.inBand {
-        delete(s.groups, g.id)
-    }
+    if !g.locked && g.msgs.empty() && !g.inBand { delete(s.groups, g.id) }
 }
 ```
 
 The epoch check is the whole stale-acknowledgment defence. Without it, a worker that
 stalls past its lease and acknowledges late deletes a message another worker is
-actively processing.
+processing.
 
-Groups are deleted once idle. Without that, a queue with unique group IDs per
-message leaks one map entry per message forever.
-
-### 6.4 Negative acknowledge
-
-```go
-// caller holds s.mu
-func (s *slot) nack(r Receipt, delay time.Duration, now time.Time, maxRetries uint32) (*Message, error) {
-    l, ok := s.inflight[r.MessageID]
-    if !ok { return nil, ErrNotInFlight }
-    if l.epoch != r.Epoch { return nil, ErrLeaseExpired }
-    delete(s.inflight, r.MessageID)
-    return s.retire(l, now, maxRetries, delay), nil
-}
-```
+Groups are deleted once idle. Without that, a queue with a unique group ID per message
+leaks one map entry per message forever.
 
 ---
 
@@ -482,13 +448,10 @@ func (s *slot) sweepLeases(now time.Time, maxRetries uint32) (dead []*Message) {
     for s.timers.Len() > 0 && !s.timers[0].at.After(now) {
         e := heap.Pop(&s.timers).(timerEntry)
         l, ok := s.inflight[e.id]
-        if !ok || l.epoch != e.epoch {
-            continue                 // acked already, or re-leased since
-        }
+        if !ok || l.epoch != e.epoch { continue }   // acked, or re-leased since
         delete(s.inflight, e.id)
-        if m := s.retire(l, now, maxRetries, 0); m != nil {
-            dead = append(dead, m)
-        }
+        s.st.inflight--
+        if m := s.retire(l, now, maxRetries, 0); m != nil { dead = append(dead, m) }
     }
     s.refreshHint()
     return dead
@@ -501,11 +464,10 @@ func (s *slot) retire(l *lease, now time.Time, maxRetries uint32, delay time.Dur
 
     switch {
     case m.expired(now):
-        s.st.expired++
-        s.dropGroupIfIdle(g)
-        return nil
+        s.retireExpired(m); s.dropGroupIfIdle(g); return nil
     case m.Attempts >= maxRetries:
         s.st.deadLettered++
+        s.st.bytes -= int64(len(m.Payload))
         s.dropGroupIfIdle(g)
         return m
     }
@@ -513,29 +475,29 @@ func (s *slot) retire(l *lease, now time.Time, maxRetries uint32, delay time.Dur
     if delay > 0 {
         m.DeliverAfter = now.Add(delay)
         heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
+        s.st.delayed++; s.st.requeued++
         s.dropGroupIfIdle(g)
-        s.st.requeued++
         return nil
     }
 
-    g.msgs.pushFront(m)              // ← FRONT of the group
+    g.msgs.pushFront(m)                        // ← FRONT of the group
+    s.st.ready[bucketOf(m.Priority)]++
     s.st.requeued++
-    if !g.inBand { s.pushGroup(g) }  // ← TAIL of the band
+    if !g.inBand { s.pushGroup(g) }            // ← TAIL of the band
     return nil
 }
 ```
 
-**The asymmetry in `retire` is the important part.** A retried message goes back to
-the **front of its group**, because it was the group's head and group ordering is
-strict. The **group** goes to the **tail of its band**, so a repeatedly failing
-message does not block the head of its priority level on every cycle.
+**The asymmetry in `retire` is the important part.** A retried message goes back to the
+**front of its group**, because it was the group's head and group ordering is strict.
+The **group** goes to the **tail of its band**, so a repeatedly failing message does not
+block the head of its priority level on every cycle.
 
-Both halves of HLD §14's retry rule are in these three lines.
+Both halves of HLD §16's retry rule are in those three lines.
 
-The timer heap uses lazy deletion. An acknowledged message leaves its timer entry in
-place; the entry is discarded when it surfaces and its epoch no longer matches. Heap
-size is therefore bounded by leases ever created, not by leases outstanding, and it
-drains as time passes.
+The timer heap uses lazy deletion. An acknowledged message leaves its entry in place; it
+is discarded when it surfaces and its epoch no longer matches. Heap size is bounded by
+leases ever created rather than leases outstanding, and it drains as time passes.
 
 ### 7.2 TTL
 
@@ -547,9 +509,7 @@ func (s *slot) sweepTTL(now time.Time) int {
         for {
             m, ok := g.msgs.front()
             if !ok || !m.expired(now) { break }
-            g.msgs.popFront()
-            s.st.expired++
-            n++
+            g.msgs.popFront(); s.retireExpired(m); n++
         }
         if !g.inBand && !g.locked && !g.msgs.empty() { s.pushGroup(g) }
         s.dropGroupIfIdle(g)
@@ -559,9 +519,9 @@ func (s *slot) sweepTTL(now time.Time) int {
 }
 ```
 
-Only the front of each group is examined. Messages behind a live head cannot be
-older than it within a group, and they are removed when they reach the front. This
-keeps the oldest-message-age metric honest without walking every message.
+Only the front of each group is examined. Messages behind a live head are removed when
+they reach the front. This keeps the oldest-message-age metric honest without walking
+every message.
 
 ### 7.3 Delayed release
 
@@ -572,6 +532,7 @@ func (s *slot) releaseDelayed(now time.Time) int {
     for s.delayed.Len() > 0 && !s.delayed[0].at.After(now) {
         e := heap.Pop(&s.delayed).(delayEntry)
         e.msg.DeliverAfter = time.Time{}
+        s.st.delayed--
         s.enqueue(e.msg, now)
         n++
     }
@@ -585,124 +546,125 @@ func (s *slot) releaseDelayed(now time.Time) int {
 
 ```go
 type Config struct {
-    Name                string
+    Key                 QueueKey
     VisibilityTimeout   time.Duration
     MaxRetries          uint32
     DefaultTTL          time.Duration
     StarvationThreshold time.Duration
     StarvationReserve   float64        // 0..1, default 0.2
     MaxDepth            int64
-    Distributed         bool           // false: all 16 slots on one machine
+    Distributed         bool
 }
 
 type Queue struct {
-    key     QueueKey
     cfg     Config
     clock   Clock
-    cluster Cluster                // which slots do I own
+    cluster Cluster
+    journal Journal
 
-    slots   map[uint16]*slot       // lazily created
+    slots   map[uint16]*slot          // lazily created
     slotsMu sync.RWMutex
 
-    seq      atomic.Uint64         // submission sequence
-    dispatch atomic.Uint64         // dispatch counter, drives the reserve
-    rr       atomic.Uint64         // round robin for ungrouped messages
-    cursor   atomic.Uint32         // rotating start for the starvation scan
-    depth    atomic.Int64
+    generation  uint64                // from the placement record
+    incarnation uint64                // from the journal
+    counter     atomic.Uint64         // low bits of Seq
+    dispatch    atomic.Uint64         // drives the starvation reserve
+    rr          atomic.Uint64         // round robin for ungrouped messages
+    cursor      atomic.Uint32         // rotating start for the starvation scan
+    depth       atomic.Int64
+    frozen      atomic.Bool           // set during a migration
 
     dlq *Queue
 }
 
-type Cluster interface {
-    // SlotFor maps a group key to one of the queue's 16 slots.
-    SlotFor(q QueueKey, groupID string) uint16
-    // PlacementGroupFor maps a queue -- or a single slot of a distributed
-    // queue -- to one of the 4096 placement groups.
-    PlacementGroupFor(q QueueKey, slot uint16, distributed bool) uint16
-    // LocalSlots lists the slots of this queue that this process owns.
-    LocalSlots(q QueueKey) []uint16
-}
-
 const (
-    SlotsPerQueue      = 16
-    NumPlacementGroups = 4096
+    SlotsPerQueue    = 16   // a normal queue
+    MaxSlotsPerQueue = 64   // a distributed queue
 )
+
+func SlotCountFor(distributed bool) int {
+    if distributed {
+        return MaxSlotsPerQueue
+    }
+    return SlotsPerQueue
+}
 ```
 
-`Cluster` is the seam described in HLD §18, and it is where multi-tenancy lives.
+### 8.1 Sequence numbers
 
 ```go
-func (c *single) SlotFor(q QueueKey, groupID string) uint16 {
-    return uint16(xxhash.Sum64String(q.Org+"\x00"+q.Name+"\x00"+groupID) % SlotsPerQueue)
+func (q *Queue) nextSeq() uint64 {
+    return (q.generation << 40) | (q.counter.Add(1) & (1<<40 - 1))
 }
-
-func (c *single) PlacementGroupFor(q QueueKey, slot uint16, distributed bool) uint16 {
-    key := q.Org + "\x00" + q.Name
-    if distributed {
-        key += "\x00" + strconv.Itoa(int(slot))   // each slot placed independently
-    }
-    return uint16(xxhash.Sum64String(key) % NumPlacementGroups)
-}
-
-func (c *single) LocalSlots(q QueueKey) []uint16 { return c.all }   // owns everything
 ```
 
-The separator byte matters. Without it, org `a` with queue `bc` and org `ab` with
-queue `c` hash identically, and two tenants would share slots.
+Twenty-four bits of generation and forty of counter — a trillion messages per
+generation, sixteen million ownership changes. The prefix is what stops two owners
+handing out overlapping values.
 
-`PlacementGroupFor` is unused in a single instance. It exists so the distributed
-implementation is a different body for the same signature: look up
-`pgMap[PlacementGroupFor(q, slot, cfg.Distributed)]` and proxy if the answer is not
-this node.
+### 8.2 Cluster
 
-**The `distributed` flag is the whole difference.** When false, the slot is left out
-of the hash, so all 16 slots of a queue resolve to the same placement group and
-therefore the same machine. When true, each slot hashes separately and lands
-wherever. One line, and it is what decides whether a queue gets exact ordering and
-exact counts or trades them for throughput.
+```go
+type Cluster interface {
+    // SlotFor maps a group key to one of the queue's slots.
+    SlotFor(q QueueKey, groupID string, slots int) uint16
+    // LocalSlots lists the slots of this queue that this process owns.
+    LocalSlots(q QueueKey, slots int) []uint16
+}
+```
 
-**A slot belongs to exactly one queue, and therefore to exactly one org.** This is
-what keeps tenants off each other's locks: no arrangement of hashes can put two orgs'
-messages behind the same mutex. Placement groups are only about which machine holds
-a slot.
+```go
+func (c *localCluster) SlotFor(q QueueKey, groupID string, slots int) uint16 {
+    return uint16(hash(q.Org+"\x00"+q.Name+"\x00"+groupID) % uint64(slots))
+}
+```
 
-### 8.1 Slot selection at enqueue
+The count is passed in rather than read from a constant because the two queue types
+have different counts. The `Queue` knows its own from `cfg.Distributed`, and it never
+changes: a group key has to keep resolving to the same slot.
+
+The separator byte matters. Without it, org `a` with queue `bc` and org `ab` with queue
+`c` hash identically, and two tenants would share slots.
+
+**`LocalSlots` is where the `distributed` flag lands in the engine.** For a normal queue
+the owning node holds all 64, so it returns all 64 and the dispatcher below sees every
+slot. For a distributed queue it returns only the slots this node owns, and the
+dispatcher cannot compare against the rest.
+
+That single difference is the entire cost of the flag inside the engine. Nothing else in
+this document changes.
+
+### 8.3 Slot selection at enqueue
 
 ```go
 func (q *Queue) slotFor(m *Message) uint16 {
     if m.GroupID != "" {
-        return q.cluster.SlotFor(q.key, m.GroupID)   // same group, same slot, always
+        return q.cluster.SlotFor(q.cfg.Key, m.GroupID)   // same group, same slot, always
     }
-    local := q.cluster.LocalSlots(q.key)
+    local := q.cluster.LocalSlots(q.cfg.Key)
     return local[q.rr.Add(1)%uint64(q.fanout(len(local)))]
 }
 
-// fanout grows the number of slots an ungrouped message can land in, in
-// proportion to how deep the queue is.
+// fanout grows the number of slots an ungrouped message can land in,
+// in proportion to how deep the queue is.
 func (q *Queue) fanout(n int) int {
-    d := q.depth.Load()
-    want := 1
-    for want < n && int64(want)*msgsPerSlotTarget < d {
-        want *= 2
-    }
+    d, want := q.depth.Load(), 1
+    for want < n && int64(want)*msgsPerSlotTarget < d { want *= 2 }
     return want
 }
 
 const msgsPerSlotTarget = 1000
 ```
 
-Round-robin across all 16 slots from the first message is wrong. A queue holding a
-thousand messages would scatter them over 16 lock-striped structures for parallelism
-it does not need, materialise all 16 slots, and make cross-slot FIFO comparison
-harder for nothing. Any queue that ever held 16 ungrouped messages would pay the full
-memory cost forever.
+Round-robin across every slot from the first message is wrong. A queue holding a
+thousand messages would scatter them over every lock-striped structure for parallelism
+it does not need, materialise them all, and make cross-slot comparison harder for
+nothing.
 
-Growing the fan-out with depth means a small queue uses one slot and a queue holding
-millions uses all of them. This is safe only because ungrouped messages carry no
-ordering constraint — nothing breaks when the fan-out changes underneath them.
-Grouped messages always hash, and are never affected.
+This is safe only because ungrouped messages carry no ordering constraint — nothing
+breaks when the fan-out changes underneath them. Grouped messages always hash.
 
-### 8.2 The dispatcher
+### 8.4 The dispatcher
 
 ```go
 func (q *Queue) Dequeue() (*Message, Receipt, bool) {
@@ -725,7 +687,7 @@ func (q *Queue) reserveTick(n uint64) bool {
 }
 ```
 
-### 8.3 Most urgent, without locking every slot
+### 8.5 Most urgent, without locking every slot
 
 ```go
 func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
@@ -737,8 +699,7 @@ func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
         for _, s := range q.localSlots() {
             h := s.hint.Load()
             if h == 0 { continue }
-            band := Priority(h - 1)
-            seq := s.headSeq.Load()
+            band, seq := Priority(h-1), s.headSeq.Load()
             if band > bestBand || (band == bestBand && seq < bestSeq) {
                 best, bestBand, bestSeq = s, band, seq
             }
@@ -755,23 +716,22 @@ func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
 }
 ```
 
-Two atomic loads per slot, then one lock on the winner. Sixty-four atomic loads is a
-few dozen nanoseconds; sixty-four mutex acquisitions would not be.
+Two atomic loads per slot, then one lock on the winner. Sixty-four atomic loads, the
+worst case, is a few dozen nanoseconds; sixty-four mutex acquisitions would not be.
 
-The `hint` and `headSeq` are read separately and can be momentarily inconsistent.
-That is acceptable: they steer the choice, and `take` verifies under the lock. A
-mismatch costs one retry.
+`hint` and `headSeq` are read separately and can be momentarily inconsistent. That is
+fine: they steer the choice, and `take` verifies under the lock. A mismatch costs one
+retry.
 
-Comparing `headSeq` at equal priority is what makes FIFO **exact**. Every slot of a
-normal queue is in this process, so the loop above sees all 16 of them and picks the
-genuinely oldest message at the highest non-empty priority. No hints, no
-approximation.
+**Comparing `headSeq` at equal priority is what makes FIFO exact.** For a normal queue
+every slot is in this process, so this loop sees all 64 and picks the genuinely oldest
+message at the highest non-empty priority.
 
-This is exactly what a `distributed` queue gives up: its slots are on different
-machines, `LocalSlots` returns only the ones here, and the comparison cannot span the
-rest. That is the whole cost of the flag, and it appears in this one loop.
+**For a distributed queue `localSlots` returns a subset**, so the comparison cannot span
+the rest and ordering is exact within a slot but approximate across machines. The whole
+cost of the flag appears in this one loop.
 
-### 8.4 The starvation path
+### 8.6 The starvation path
 
 ```go
 func (q *Queue) takeStarved(now time.Time) (*Message, Receipt, bool) {
@@ -792,19 +752,42 @@ func (q *Queue) takeStarved(now time.Time) (*Message, Receipt, bool) {
 }
 ```
 
-`oldestBandBefore` walks set bits from the lowest priority upward and returns the
-first band whose head message was enqueued before the cutoff. Low priorities are
-checked first because that is where starvation happens.
+`oldestBandBefore` walks set bits from the lowest priority upward and returns the first
+band whose head was enqueued before the cutoff. Low priorities are checked first because
+that is where starvation happens.
 
-The scan is capped at `starvationScanLimit` (16) and starts from a rotating cursor,
-so the work is bounded while every slot is still reached over time. This path runs
-on `StarvationReserve` of dispatches, so the amortised cost is small.
+The scan is capped and starts from a rotating cursor, so the work is bounded while every
+slot is still reached over time. This path runs on `StarvationReserve` of dispatches.
 
 ---
 
-## 9. Invariants
+## 9. Migration support
 
-Asserted by the property tests in LLD 6.
+The engine does not move data — the layer above does. It provides two operations.
+
+```go
+// Freeze stops the engine serving. Enqueue and Dequeue return ErrFrozen.
+// In-flight leases are voided and their messages return to available.
+func (q *Queue) Freeze() []*Message      // snapshot, in Seq order
+
+// Absorb merges messages into a live queue, inserting by Seq rather than
+// appending, so messages from an older generation land in the right place.
+func (q *Queue) Absorb(msgs []*Message) error
+```
+
+`Freeze` returns everything in `Seq` order so the receiving side can insert cheaply.
+`Absorb` handles both cases from HLD §12 and §13: a migration into a fresh queue, where
+every message is new, and a merge into a running queue after a node returns, where
+older-generation messages must sort ahead of newer ones.
+
+Insertion by `Seq` is what makes the merge correct. Appending would put recovered
+messages behind everything accepted during the outage.
+
+---
+
+## 10. Invariants
+
+Asserted by the property tests in HLD §21.
 
 1. A message is in exactly one of: a group deque, `inflight`, or `delayed`.
 2. `g.locked` is true if and only if some lease in `inflight` points at `g`.
@@ -812,12 +795,25 @@ Asserted by the property tests in LLD 6.
 4. `bandMask` bit `p` is set if `bands[p]` is non-empty. The converse may not hold —
    the bitmap is a superset, never a subset.
 5. A group in `s.groups` has at least one message, or is locked, or is in a band.
-6. Within a group, `msgs` is in submission order at all times, including after retry.
-7. `epochSeq` never decreases, so an older receipt can never match a newer lease.
+6. Within a group, `msgs` is in submission order at all times, including after retry
+   and after `Absorb`.
+7. `epochSeq` never decreases within a run; `Incarnation` never decreases across runs;
+   `generation` never decreases across owners.
 
 ---
 
-## 10. Complexity
+## 11. Concurrency rules
+
+- **One lock per slot**, covering every field of that slot.
+- **Never hold two slot locks at once.** No cross-slot transaction exists, so the lock
+  graph has no cycles and deadlock is impossible.
+- **Never do I/O under a slot lock.** The journal append happens before the lock.
+- `slotsMu` is held only for the map lookup that finds a slot.
+- Sweeps take one slot's lock at a time and release it before moving on.
+
+---
+
+## 12. Complexity
 
 | Operation | Cost |
 |---|---|
@@ -825,42 +821,16 @@ Asserted by the property tests in LLD 6.
 | Dequeue, urgent path | O(S) atomic loads + O(1) under one lock |
 | Dequeue, starvation path | O(min(S, 16)) locks, on a fraction of dispatches |
 | Acknowledge | O(1) |
-| Negative acknowledge | O(1), or O(log D) with a delay |
 | Lease sweep | O(k log T) for k expired |
-| TTL sweep | O(G), groups in the slot |
+| TTL sweep | O(G) groups |
 | Delayed release | O(k log D) |
+| Freeze | O(N) messages |
+| Absorb | O(N log N) |
 
-S = local slots (16), T = timer heap, D = delay heap, G = groups.
+S = local slots (≤64), T = timer heap, D = delay heap, G = groups, N = messages moved.
 
-### Memory
-
-### Counters
-
-Every slot maintains these under its own lock, so they cost nothing beyond the
-arithmetic:
-
-```go
-type slotStats struct {
-    ready    [3]int64   // bucketed low / medium / high, for the depth metric
-    inflight int64
-    delayed  int64
-    bytes    int64
-
-    // cumulative, only ever increase
-    enqueued, acked, expired, requeued, deadLettered, escapes uint64
-}
-```
-
-`ready` is bucketed into three rather than kept per priority level, because that is
-the granularity metrics are reported at (HLD §15), and 101 counters per slot would
-cost more than the bands themselves.
-
-None of this is written to the log. After a crash the node replays and rebuilds, and
-the counters come out of the rebuilt state, so there is no second thing to keep
-consistent.
-
-A queue's depth is the sum across its slots: a local walk on a single instance, and
-the fan-out described in HLD §4 for a cluster.
+**Nothing on the request path scales with queue depth.** That is the property the
+latency budget depends on.
 
 ### Memory
 
@@ -873,102 +843,122 @@ the fan-out described in HLD §4 for a cluster.
 | mutex, counters, hints, id | ~80 |
 | **Total, before any message** | **~440** |
 
-A dense `[101]deque` would add 3,232 bytes to every one of these. Slots are created
-on first use, so an idle queue costs nothing at all.
+The two counts are set by different things.
 
-Nothing scales with queue depth. That is the property the latency budget in HLD §16
-depends on.
+A normal queue's slots are only lock stripes, and a benchmark of the full enqueue,
+dequeue and acknowledge cycle shows the gain is flat past four (1707 ns at one slot,
+1187 at four, 1171 at sixteen, 1150 at sixty-four). Sixteen sits past that knee with
+margin for a machine with many cores, and costs a quarter of what sixty-four would.
 
----
+A distributed queue's count is also the ceiling on how many machines it can use, and
+sixty-four keys spread evenly across a handful of machines where sixteen are lumpy.
+Fan-out costs there are bounded by machine count rather than slot count, so the larger
+number is close to free.
 
-## 11. Edge cases
+The engine imports nothing outside the standard library, so these constants cannot
+be shared with `backend/constants`. A test in `queue/logic` asserts the two agree,
+and `EnqueueToSlot` rejects a slot outside the queue's range: without both, the gateway
+could route a message to a slot the dispatcher never scans, and it would be
+written to the log and then never delivered.
 
-| Case | Behaviour |
-|---|---|
-| Acknowledge after the lease expired | `ErrLeaseExpired`, epoch mismatch |
-| Acknowledge twice | `ErrNotInFlight`; the API layer maps it to 200 |
-| Acknowledge a dead-lettered message | `ErrNotInFlight` |
-| Every group in a slot is locked | `take` returns false; the dispatcher moves on |
-| Head of a group is TTL-expired | Popped and skipped inside `take` |
-| Every message in a group expires | Group deleted, `take` returns false, caller retries |
-| Retry on the last attempt | Returned from `retire` for dead-lettering |
-| `MaxRetries` is 0 | Dead-letters on the first lease expiry |
-| Ungrouped messages | `gid = m.ID`, a group of one, never blocked |
-| Two orgs, same queue name | Different `QueueKey`, different slots, no shared state |
-| Queue at `MaxDepth` | `ErrQueueFull` at enqueue; the API layer returns 503 |
-| Group spanning priorities | Group sits in the band of its current head, re-banded on unlock |
-| Band holds only stale entries | `takeGroup` drains them and clears the bit |
-| Delay longer than the TTL | Released, then dropped as expired at `take` |
-| Clock moves backwards | Leases use monotonic readings, unaffected |
+A dense `[101]deque` would add 3,232 bytes to every one. Slots are created on first use,
+so an idle queue costs nothing.
 
 ---
 
-## 12. Reading counters out
-
-The engine never talks to a metrics library. It exposes a snapshot and something
-above it decides what to do with the numbers.
+## 13. Counters and stats
 
 ```go
-// Stats returns a consistent snapshot of one queue's counters.
-// Every slot is read under its own lock, sequentially, so the whole call
-// takes microseconds and the queue is never frozen.
-func (q *Queue) Stats(now time.Time) QueueStats
-
-type QueueStats struct {
-    Ready        [3]int64      // bucketed low / medium / high
-    InFlight     int64
-    Delayed      int64
-    Bytes        int64
-    OldestAge    time.Duration // max across slots, clamped at >= 0
-    Enqueued     uint64
-    Acknowledged uint64
-    Expired      uint64
-    Requeued     uint64
-    DeadLettered uint64
-    Escapes      uint64
+type slotStats struct {
+    ready    [3]int64   // bucketed low / medium / high
+    inflight int64
+    delayed  int64
+    bytes    int64
+    enqueued, acked, expired, requeued, deadLettered uint64   // cumulative
 }
+
+// Stats reads every slot under its own lock, sequentially.
+func (q *Queue) Stats(now time.Time) QueueStats
 ```
 
-For a normal queue this is **exact**. All 16 slots are here, each counter is read
-under the lock that maintains it, and the whole call is microseconds — far shorter
-than the time the answer spends travelling back to the caller.
+`ready` is bucketed into three rather than kept per level, because that is the
+granularity metrics are reported at and 101 counters per slot would cost more than the
+bands themselves.
 
-Reads are sequential, not simultaneous, because holding two slot locks at once is
-forbidden (§10). The gap between the first and last slot read is a few microseconds,
-which at any realistic rate is under one message.
+None of this is written to the log. After a crash the node replays and rebuilds, and the
+counters come out of the rebuilt state.
+
+**For a normal queue `Stats` is exact.** All 16 slots are here, each counter is read
+under the lock that maintains it, and the whole call is microseconds. Reads are
+sequential, not simultaneous, because holding two slot locks at once is forbidden — the
+gap between first and last is a few microseconds, under one message at any realistic
+rate.
 
 `OldestAge` aggregates as a **maximum** across slots, never a sum, and is clamped at
 zero so a clock adjustment cannot produce a negative age.
 
-The node layer serves this over its internal RPC; the gateway collects from every
-node it talks to and serves both `/metrics` and the stats endpoint from one cache
-(HLD §15). The engine knows about none of that.
+---
+
+## 14. Edge cases
+
+| Case | Behaviour |
+|---|---|
+| Acknowledge after the lease expired | `ErrLeaseExpired` — epoch mismatch |
+| Acknowledge with a receipt from before a restart | Rejected on incarnation |
+| Acknowledge with a receipt from before a move | Rejected on generation, in `Seq` |
+| Acknowledge twice | `ErrNotInFlight`; the API layer maps it to 200 |
+| Every group in a slot is locked | `take` returns false; the dispatcher moves on |
+| Head of a group is TTL-expired | Popped and skipped inside `take` |
+| Every message in a group expires | Group deleted, caller retries |
+| `MaxRetries` is 0 | Dead-letters on the first lease expiry |
+| Ungrouped messages | `gid = m.ID`, a group of one, never blocked |
+| Group spanning priorities | Sits in the band of its current head, re-banded on unlock |
+| Band holds only stale entries | `takeGroup` drains them and clears the bit |
+| Delay longer than the TTL | Released, then dropped as expired at `take` |
+| Queue at `MaxDepth` | `ErrQueueFull`; the API layer returns 503 |
+| Enqueue or dequeue while frozen | `ErrFrozen`; the gateway retries at the new owner |
+| Absorb of an older generation | Inserted by `Seq`, ahead of newer messages |
+| Two orgs, same queue name | Different `QueueKey`, different slots, no shared state |
+| Clock moves backwards | Leases use monotonic readings, unaffected |
 
 ---
 
-## 13. What LLD 2 has to provide
-
-The engine calls into storage at exactly three points, and they are the only places
-the engine is not self-contained:
+## 15. What the layer above must provide
 
 ```go
+type Clock interface{ Now() time.Time }
+
 type Journal interface {
     // Incarnation is read once at startup, after replay.
     Incarnation() uint64
+
     // AppendEnqueue writes and flushes before returning. Its error fails the
     // enqueue, so nothing becomes visible that is not already in the log.
-    AppendEnqueue(m *Message) error
-    // The rest are fire-and-forget: buffered, flushed on the journal's own
-    // schedule. Losing them costs at most one extra retry or one redelivery.
-    AppendAttempt(id string, n uint32, epoch uint64)
-    AppendTerminal(id string, kind TerminalKind)   // ack, expire, dead-letter
+    AppendEnqueue(slot uint16, m *Message) error
+
+    // Buffered, flushed on the journal's own schedule. Losing them costs at
+    // most one extra retry or one redelivery.
+    AppendAttempt(slot uint16, id string, n uint32, epoch uint64)
+    AppendTerminal(slot uint16, id string, kind TerminalKind)
 }
 ```
 
-Only `AppendEnqueue` is on the critical path, and it is what makes the ordering in
-HLD §10 real: write, flush, then apply in memory. The others are buffered because
-flushing every delivery would double the cost of the most common operation, and the
-worst case after a crash is a message getting one extra retry.
+Only `AppendEnqueue` is on the critical path, and it is what makes HLD §11's ordering
+real: write, flush, then apply in memory. The others are buffered because flushing every
+delivery would double the cost of the most common operation.
 
-The no-op implementation satisfies this interface, which is what lets the engine be
-tested with no disk at all.
+The no-op journal returns incarnation 0 and discards everything, which is what lets the
+engine be tested with no disk at all. `FakeClock` is a hand-written struct with an
+`Advance` method — the only substitution the tests need.
+
+---
+
+## 16. The other documents
+
+| # | Component | Covers |
+|---|---|---|
+| 2 | Write-ahead log | Record format, segments, CRC, replay, snapshot |
+| 3 | Node | Slot ownership, gRPC surface, sweepers, notifications, migration |
+| 4 | Gateway | REST, routing, config cache, long polling, metric collection |
+| 5 | Placement and metadata | Postgres schema, etcd membership, rendezvous, rebalancing |
+| 6 | Frontend and harnesses | UI, producer and consumer stubs |

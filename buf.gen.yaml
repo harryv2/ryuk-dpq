@@ -1,0 +1,10 @@
+version: v2
+managed:
+  enabled: false
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: module=github.com/harryv2/ryuk-dpq
+  - local: protoc-gen-go-grpc
+    out: .
+    opt: module=github.com/harryv2/ryuk-dpq

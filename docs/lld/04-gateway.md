@@ -1,348 +1,258 @@
 # LLD 4 — Gateway
 
-The stateless tier. Terminates client HTTP, resolves the caller to an org, works out
-where a message belongs, and forwards to the node that holds it.
+Implements HLD §6, §8, §9, §13, §17. Packages `backend/gateway/*`.
 
-Implements: HLD Sections 4, 5, 6, 7.
-
----
-
-## 1. Structure
-
-```go
-type Gateway struct {
-    meta    *meta.Client       // Postgres configs, etcd watches (LLD 5)
-    auth    *authCache         // credential → org
-    configs *configCache       // (org, name) → config
-    limits  *rateLimiter       // token bucket per org
-    pool    *nodePool          // gRPC connections, one per node
-    placement atomic.Pointer[PlacementMap]
-}
-```
-
-Nothing here is authoritative. Every field is a cache of something owned elsewhere,
-which is what makes gateways interchangeable and lets the load balancer treat them as
-identical (HLD §5).
+The gateway stores nothing. It resolves a credential to an org, works out which
+machine owns a queue, forwards, and collects metrics.
 
 ---
 
-## 2. Request path
+## 1. Shape
 
 ```
-  authenticate → resolve config → validate → rate limit
-      → compute slot → look up node → forward → translate the reply
+controller/   public HTTP, credential to org, status mapping
+logic/        routing, placement, operations, collector, rebalancer, waiters
+repo/queueconfigpg/  Postgres
+repo/nodegrpc/       one gRPC connection per node
 ```
 
 ```go
-func (g *Gateway) enqueue(w http.ResponseWriter, r *http.Request) {
-    org, err := g.auth.Resolve(r.Header.Get("Authorization"))
-    if err != nil { write(w, 401, "unauthenticated"); return }
+type GatewayLogic struct {
+    configs entity.QueueConfigRepo
+    nodes   entity.NodeRepo
+    members *membership.Client
 
-    name := mux.Var(r, "queue")
-    cfg, err := g.configs.Get(QueueKey{org, name})
-    switch {
-    case errors.Is(err, meta.ErrNoQueue): write(w, 404, "no such queue"); return
-    case err != nil:                      write(w, 503, "metadata unavailable"); return
-    case cfg.State == meta.StateDeleting: write(w, 404, "queue is being deleted"); return
-    }
-
-    var req EnqueueRequest
-    if err := decode(r, &req, maxPayloadBytes); err != nil { write(w, 400, err); return }
-    if err := validate(&req, cfg); err != nil { write(w, 400, err); return }
-    if !g.limits.Allow(org, 1) { writeRetryAfter(w, 429); return }
-
-    key  := QueueKey{org, name}
-    slot := slotFor(key, req.GroupID, cfg)
-    node, ok := g.route(key, slot)
-    if !ok { write(w, 503, "no owner for this slot"); return }
-
-    resp, err := g.pool.For(node).Enqueue(r.Context(), buildRPC(key, slot, &req))
-    if err != nil { g.translateRPCError(w, err, key, slot); return }
-    writeJSON(w, 201, EnqueueResponse{MessageID: resp.MessageId})
+    wait  *waiters
+    cache *cache.TTL[string, entity.QueueConfig]
+    stats *cache.TTL[string, entity.NodeStats]
 }
 ```
-
-**Authentication happens first, before anything reads the queue name.** Every step
-after it is scoped to one org, so there is no later check that can be forgotten
-(HLD §5).
 
 ---
 
-## 3. Authentication
+## 2. Credential first
 
 ```go
-type authCache struct {
-    ttl   time.Duration          // 60s
-    neg   time.Duration          // 5s for failures
-    lru   *lru.Cache[string, authEntry]
-    sf    singleflight.Group
-}
-
-type authEntry struct {
-    org       string
-    crossOrg  bool               // admin credentials only
-    expiresAt time.Time
+func (h *Handlers) withOrg(next orgHandler) http.HandlerFunc {
+    token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+    org, ok := h.orgs[token]
+    if !ok { writeErr(w, ...); return }
+    next(w, r, org)
 }
 ```
 
-Credentials are hashed before they are used as a cache key, and the hash is what
-appears in logs. A raw credential never reaches a log line or an error message.
+Resolving the credential before anything else means every later step is already
+scoped to one org, so there is no second check to forget. A caller cannot reach
+another org's queue by guessing a name, because the name is only half the
+identifier.
 
-`singleflight` collapses concurrent lookups of the same credential into one database
-query. Without it, a burst from a new client turns into a burst against Postgres.
-
-Failures are cached briefly. A client looping with a bad credential should not
-produce one query per request, and five seconds is short enough that rotating a
-credential takes effect quickly.
-
-### Cross-org access
-
-```go
-if entry.crossOrg {
-    if h := r.Header.Get("X-Ryuk-Org"); h != "" { org = h }
-}
-```
-
-For an ordinary credential the header is **ignored, not rejected** (HLD §4). A client
-that sets it by accident sees its own org rather than a confusing error.
+The token-to-org map is hardcoded today. Real authentication replaces this one
+function.
 
 ---
 
-## 4. Config cache
+## 3. Config cache
 
 ```go
-type configCache struct {
-    ttl time.Duration            // 30s
-    neg time.Duration            // 2s
-    m   *lru.Cache[QueueKey, cfgEntry]
-    sf  singleflight.Group
+func (l *GatewayLogic) config(ctx, org, name) (entity.QueueConfig, error) {
+    if c, ok := l.cache.Get(key(org, name)); ok { ... }
+    cfg, err := l.configs.Get(ctx, org, name)
+    ...
 }
 ```
 
-Two rules, both from HLD §5:
+Two rules keep it from causing trouble.
 
 **A miss means go and look, not "no such queue."** Someone creates a queue and
-submits to it immediately. Treating a miss as a 404 would fail.
+submits to it immediately; treating a miss as a 404 would fail.
 
-**Negative results live for a second or two.** Not caching them means a typo in a
-loop queries Postgres every time; caching them for long recreates the problem above.
+**A negative result is cached for two seconds**, so a loop with a typo'd name does
+not hit Postgres every time, without bringing back the first problem. An empty
+`QueueConfig` in the cache is the marker.
 
-Thirty seconds of staleness is acceptable because everything a config controls
-tolerates it: a new visibility timeout applies to new leases, a new retry limit to
-new failures. The optional faster path is a version counter in etcd, which gateways
-already watch for the placement map.
+Evicted immediately when a node says a queue has moved.
 
 ---
 
-## 5. Routing
+## 4. Placement
 
 ```go
-func slotFor(k QueueKey, groupID string, cfg *meta.Config) uint16 {
-    if groupID != "" {
-        return uint16(hash(k.Org, k.Name, groupID) % queue.SlotsPerQueue)
+func OwnerFor(key string, members []Member) (Member, bool)   // rendezvous hashing
+```
+
+Every gateway computes the same owner from the same member list, so there is
+nothing to elect and no map to keep consistent. Adding a machine moves only the
+keys that machine now wins.
+
+**But the stored owner wins over the hash.**
+
+```go
+func (l *GatewayLogic) ownerAddr(ctx, cfg, slot) (string, string, error) {
+    stored := cfg.OwnerNode
+    if cfg.Distributed { stored = cfg.SlotOwners[uint16(slot)] }
+
+    if stored != "" {
+        if m, ok := l.members.Lookup(stored); ok { return stored, m.Addr, nil }
+        // the owner is down; nothing is reassigned, because its data is only there
+        return stored, "", enterr.New(enterr.CodeExhausted, ...)
     }
-    return uint16(rand.Uint32() % uint32(cfg.Fanout()))    // §5.1
-}
-
-func (g *Gateway) route(k QueueKey, slot uint16) (NodeID, bool) {
-    pm := g.placement.Load()
-    pg := uint16(hash(k.Org, k.Name, slot) % NumPlacementGroups)
-    owner, ok := pm.Owner(pg)
-    return owner, ok
+    // first use: pick an owner and record it
 }
 ```
 
-Both hashes salt with the org and the queue name, so two tenants using the same group
-key never collide on a slot (HLD §9).
-
-The gateway **computes and looks up; it never chooses** (HLD §5). Slot and placement
-group are pure functions, and ownership comes from the map. Nothing about routing is
-a judgement call, which is why many gateways need no coordination between them.
-
-### 5.1 Fan-out for ungrouped messages
-
-The gateway cannot see queue depth, so it cannot compute the adaptive fan-out from
-LLD 1 §8.1 itself. Nodes report each queue's current fan-out in their stats, and it
-rides along on the same gossip that carries priority hints (§6). A stale value only
-means messages land in slightly fewer or more slots than ideal, which is harmless —
-ungrouped messages carry no ordering constraint.
-
-### 5.2 Placement map changes
-
-The map is watched, not polled. A change replaces the pointer atomically, so readers
-never lock:
-
-```go
-func (g *Gateway) onPlacementChange(pm *PlacementMap) {
-    g.placement.Store(pm)
-}
-```
-
-A node that no longer owns a slot returns `FailedPrecondition` with its map version.
-If that version is newer than ours, we refresh and retry once. If it is older, the
-node is behind and we retry a different replica.
+When a node dies the hash immediately names somebody else, but the data is only on
+the dead node. Reassigning would hand the caller an empty queue while the real
+messages sat on a disk nobody was reading. So ownership follows the data, and a
+queue on a dead node returns 503 until it comes back.
 
 ---
 
-## 6. Choosing a node for dequeue
-
-A consumer asks for work from a queue, not from a slot. The gateway has to pick.
+## 5. Routing and the moved retry
 
 ```go
-func (g *Gateway) dequeueTarget(k QueueKey) NodeID {
-    best, bestBand := NodeID(""), -1
-    for _, n := range g.owners(k) {
-        if b := g.hints.Band(n, k); b > bestBand {
-            best, bestBand = n, b
-        }
+func (l *GatewayLogic) withOwner(ctx, cfg, slot, call) error {
+    for attempt := 0; attempt < 2; attempt++ {
+        _, addr, err := l.ownerAddr(ctx, cfg, slot)
+        err = call(addr, cfg.Spec())
+        if err == nil { return nil }
+        if enterr.CodeOf(err) != enterr.CodeMoved || attempt == 1 { return err }
+        l.cache.Evict(key(cfg.Org, cfg.Name))
+        cfg, err = l.config(ctx, cfg.Org, cfg.Name)
     }
-    return best
 }
 ```
 
-Each node publishes the most urgent priority it currently holds per queue — a few
-bits, refreshed every 100 ms (HLD §7). Gateways route to whichever claims the most
-urgent work.
-
-Gateways are few relative to nodes, so this converges quickly. A stale hint costs one
-suboptimal choice and corrects on the next refresh. Asking every node on every request
-would put a round trip on the hot path and produce traffic quadratic in cluster size.
+A node that no longer owns a queue says so, the cached config is dropped, and the
+call is retried once against the new owner. That is the whole cost of a migration
+as far as a producer is concerned.
 
 ---
 
-## 7. Long polling and the delivery handshake
+## 6. The two queue types
+
+The difference appears in exactly three places.
+
+**Creation.** A normal queue gets one owner; a distributed queue places each of
+its sixty-four slots independently, so they spread over up to sixty-four machines.
+
+**Enqueue.** The slot comes from `hash(org, queue, groupID)`, so every message in
+a group lands on the same slot — that is what makes ordering possible. The gateway
+sends the slot explicitly, so the node uses the same one rather than choosing its
+own.
+
+**Dequeue and stats.**
 
 ```go
-func (g *Gateway) dequeue(w http.ResponseWriter, r *http.Request) {
-    // ... auth, config, validate ...
-    stream := g.pool.For(node).DequeueStream()      // multiplexed, long-lived
+if !cfg.Distributed {
+    // one machine: one call, and the answer is exact
+}
+// spread: ask each machine holding a slot
+```
 
-    if err := stream.Send(&Want{Key: key, Max: req.MaxMessages, Wait: req.WaitTime}); err != nil {
-        write(w, 503, "node unavailable"); return
+For a distributed queue, dequeue tries owners ranked by the collector's last view
+of who has the most urgent work, falling through when one comes back empty. Stats
+asks every owner and sums, reports `exact: false`, and counts machines it could
+not reach rather than quietly under-reporting.
+
+A stale ranking costs one wasted call. Asking every machine on every request would
+put a round trip on the hot path.
+
+---
+
+## 7. Long polling
+
+```go
+msgs, err := take()
+if len(msgs) > 0 || req.WaitTime <= 0 { return ... }
+
+ch := l.wait.park(key(org, queue))
+defer l.wait.unpark(...)
+
+select {
+case <-timer.C:  return nothing
+case <-ch:       take() again
+}
+```
+
+The try-once first is what keeps this cheap: a busy queue never parks, so the
+machinery only exists on idle queues where nobody notices it.
+
+`RunSubscriber` keeps one gRPC stream open per node and forwards notifications to
+whichever consumer is parked. Ten thousand parked consumers are ten thousand map
+entries and no extra connections.
+
+Waking releases **one** waiter, because a notification means one message.
+
+---
+
+## 8. Rebalancing
+
+```go
+func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
+    case <-l.members.Changed():
+        settleAt = time.Now().Add(stabilityWindow)   // 15s
+    case <-tick.C:
+        if past settleAt { l.Rebalance(ctx) }
+}
+```
+
+The window exists because a container in a crash loop would otherwise move data
+continuously, which hurts far more than the imbalance it is correcting. At most
+two queues move per pass.
+
+A migration is a state flip, then freeze, ship, record, release:
+
+```go
+if err := l.configs.SetState(ctx, org, name, StateMigrating); err != nil { return }
+transfer, _ := l.nodes.Freeze(ctx, from.Addr, spec, slots)
+transfer.Spec.Generation = cfg.Generation + 1
+l.nodes.Absorb(ctx, to.Addr, transfer)
+l.configs.SetOwner(ctx, org, name, to.ID, nextGen)
+l.nodes.Drop(ctx, from.Addr, spec)
+```
+
+`SetState` into `migrating` only succeeds from `active`, so whichever gateway wins
+the update owns the move and the others skip it. That is the only coordination
+between gateways in the whole system.
+
+**A queue whose owner is down is never moved.** Its data is only there.
+
+A distributed queue is rebalanced slot by slot, with slots going the same way
+batched into one handoff.
+
+---
+
+## 9. Collector
+
+```go
+for _, m := range l.members.Members() {
+    nodeID, all, err := l.nodes.StatsAll(ctx, m.Addr)
+    for _, s := range all {
+        l.stats.Put(key(s.Org, s.Name), s)
+        l.stats.Put(key(s.Org, s.Name)+"@"+nodeID, s)
     }
-    msgs, err := stream.Recv()
-    if err != nil { write(w, 503, "node unavailable"); return }
-    if len(msgs.Messages) == 0 { w.WriteHeader(204); return }
-
-    if err := writeJSON(w, 200, toResponse(msgs)); err != nil {
-        return                      // consumer vanished; leases release on stream close
-    }
-    stream.Send(&Handed{Receipts: receiptsOf(msgs)})   // ← confirms delivery
 }
 ```
 
-The `Handed` message is what closes the failure window in HLD §11. If the gateway
-dies before sending it, the node releases those leases immediately instead of holding
-them for a full visibility timeout. If it dies after, the lease behaves normally,
-because a consumer really did receive the message.
+One request per node every five seconds returns every queue that node holds, so
+the cost is fixed in the number of machines rather than the number of queues.
 
-One stream per gateway-node pair, multiplexed across consumers, so a thousand waiting
-consumers do not open a thousand streams to each node.
+The per-node entry is what ranks owners for a distributed dequeue.
 
-**Idle timeouts.** A `waitTime` of up to twenty seconds means the load balancer's idle
-timeout must exceed it. Most default to sixty seconds, but a shorter one would kill
-long polls and look like a client bug. This belongs in the deployment notes because
-it is invisible until it bites.
+Everything that reports numbers reads this one cache, so the dashboard, the stats
+endpoint and `/metrics` cannot disagree.
 
 ---
 
-## 8. Rate limiting
+## 10. Status mapping
 
-```go
-type rateLimiter struct {
-    gateways atomic.Int32                    // live gateway count, from etcd
-    buckets  *lru.Cache[string, *bucket]     // per org
-}
-
-func (l *rateLimiter) Allow(org string, n int) bool {
-    share := l.orgLimit(org) / int(l.gateways.Load())
-    return l.bucket(org, share).AllowN(n)
-}
-```
-
-Each gateway enforces its share of the org's allowance. This is approximate — an org
-whose traffic lands unevenly gets a little less than its limit, and one gateway going
-down briefly raises everyone's share (HLD §9).
-
-Exactness would require a shared counter consulted on every request, which is a round
-trip on the hot path to enforce a capacity-planning limit. Not worth it.
-
-The gateway count comes from etcd membership, so the share adjusts as gateways scale.
-
----
-
-## 9. Error translation
-
-The one place engine and RPC vocabulary become HTTP.
-
-| Source | HTTP | Body |
-|---|---|---|
-| `ErrLeaseExpired` | 409 | lease expired, message was redelivered |
-| `ErrNotInFlight` | **200** | idempotent, nothing to do |
-| `ErrBadReceipt` | 400 | malformed receipt |
-| `ErrBadPriority` | 400 | priority out of range |
-| `ErrQueueFull`, `ErrQuotaExceeded` | 503 | with `Retry-After` |
-| `meta.ErrNoQueue` | 404 | |
-| `FailedPrecondition` from a node | retry once, then 503 | stale placement map |
-| `Unavailable` from a node | retry another replica, then 503 | |
-| `DeadlineExceeded` | 504 | |
-
-`ErrNotInFlight` mapping to 200 is the interesting one. The engine cannot tell "already
-acknowledged" from "never existed," and a consumer retrying an acknowledgment after a
-network timeout is the common case. Returning 404 would make correct clients log
-errors for doing the right thing.
-
----
-
-## 10. Connection pool
-
-```go
-type nodePool struct {
-    mu    sync.RWMutex
-    conns map[NodeID]*grpc.ClientConn
-}
-```
-
-One HTTP/2 connection per node, multiplexing all requests. Connections are created on
-first use and closed when a node leaves membership.
-
-Health follows gRPC's own connectivity state rather than a separate health check.
-A node in `TRANSIENT_FAILURE` is skipped for dequeue routing, since another replica
-can serve it. Enqueue and acknowledge cannot be rerouted — only the owner can take
-them — so those fail fast with 503 and let the client retry.
-
----
-
-## 11. What the gateway must never do
-
-Three rules, each of which breaks a guarantee if violated.
-
-**Never buffer a write.** No acknowledgment to a producer until the owning node has
-committed. A stateless tier holding accepted-but-not-durable messages would void the
-durability guarantee (HLD §5).
-
-**Never decide placement.** Slot and placement group are pure functions; ownership
-comes from the map. If gateways could choose, two of them could send one group to
-different slots and silently break ordering.
-
-**Never trust a client-supplied org.** It comes from the credential. The only
-exception is an admin credential carrying explicit cross-org scope.
-
----
-
-## 12. Edge cases
-
-| Case | Behaviour |
+| Logic code | HTTP |
 |---|---|
-| Credential valid, queue belongs to another org | 404, not 403 — existence is not disclosed |
-| Queue created moments ago | Cache miss triggers a read; found |
-| Queue deleted moments ago | Serves until the cache refreshes, then 404; the node rejects sooner |
-| Placement map stale | Node returns its version, gateway refreshes and retries once |
-| Every owner of a slot is down | 503; the coordinator is already promoting a replica |
-| Consumer disconnects mid-response | `Handed` is not sent, leases release immediately |
-| `waitTime` above the cap | Clamped to 20s |
-| Payload above the cap | 413, rejected before it crosses the internal network |
-| Postgres down, config cached | Serves normally |
-| Postgres down, config not cached | 503 — we cannot invent a config |
-| etcd down | Serves from the cached placement map |
-| Two gateways create the same queue at once | The primary key decides; the loser reads back and returns 200 or 409 |
+| `invalid` | 400 |
+| `not_found` | 404 |
+| `conflict` | 409 |
+| `exhausted` | 503 |
+| `moved` | 503 |
+
+Dequeue returns **204** when nothing is available, because an empty queue is not
+an error.

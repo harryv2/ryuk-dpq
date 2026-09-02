@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package ryuk.queue.v1;
+
+option go_package = "github.com/harryv2/ryuk-dpq/backend/proto/queue/v1;queuev1";
+
+// QueueSpec travels with every request so a node can materialise a queue it has
+// not seen without a separate create call.
+message QueueSpec {
+  string org = 1;
+  string name = 2;
+  int64 visibility_timeout_ns = 3;
+  uint32 max_retries = 4;
+  int64 default_ttl_ns = 5;
+  int64 starvation_threshold_ns = 6;
+  double starvation_reserve = 7;
+  int64 max_depth = 8;
+  bool distributed = 9;
+  uint64 generation = 10;
+}
+
+message EnqueueRequest {
+  QueueSpec spec = 1;
+  // Set when the caller has already chosen the slot, which it has to for a
+  // grouped message so ordering holds.
+  optional uint32 slot = 2;
+  bytes payload = 3;
+  uint32 priority = 4;
+  string group_id = 5;
+  int64 ttl_ns = 6;
+  int64 deliver_after_ns = 7;
+}
+
+message EnqueueResponse {
+  string message_id = 1;
+  uint32 slot = 2;
+  uint64 seq = 3;
+}
+
+message DequeueRequest {
+  QueueSpec spec = 1;
+  int32 max_messages = 2;
+}
+
+message DeliveredMessage {
+  string message_id = 1;
+  bytes payload = 2;
+  uint32 priority = 3;
+  string group_id = 4;
+  uint32 attempts = 5;
+  int64 enqueued_at_unix_ns = 6;
+  string receipt = 7;
+}
+
+message DequeueResponse {
+  repeated DeliveredMessage messages = 1;
+}
+
+message AckRequest {
+  QueueSpec spec = 1;
+  string receipt = 2;
+}
+
+message NackRequest {
+  QueueSpec spec = 1;
+  string receipt = 2;
+  int64 delay_ns = 3;
+}
+
+message Empty {}
+
+message StatsRequest {
+  QueueSpec spec = 1;
+}
+
+message FreezeRequest {
+  QueueSpec spec = 1;
+  // Empty means every slot this node holds for the queue. A distributed queue
+  // moves one slot at a time, so only those are named.
+  repeated uint32 slots = 2;
+}
+
+message QueueStats {
+  string org = 1;
+  string name = 2;
+  // ready is bucketed low, medium, high -- the granularity metrics report at.
+  repeated int64 ready = 3;
+  int64 in_flight = 4;
+  int64 delayed = 5;
+  int64 oldest_age_ns = 6;
+  uint64 enqueued = 7;
+  uint64 acked = 8;
+  uint64 expired = 9;
+  uint64 requeued = 10;
+  uint64 dead_lettered = 11;
+  uint64 escapes = 12;
+}
+
+message StatsAllResponse {
+  string node_id = 1;
+  repeated QueueStats queues = 2;
+}
+
+message WireMessage {
+  string id = 1;
+  bytes payload = 2;
+  uint32 priority = 3;
+  string group_id = 4;
+  uint64 seq = 5;
+  int64 enqueued_at_unix_ns = 6;
+  int64 expires_at_unix_ns = 7;
+  int64 deliver_after_unix_ns = 8;
+  uint32 attempts = 9;
+}
+
+message SlotMessages {
+  repeated WireMessage messages = 1;
+}
+
+// Transfer carries a queue's contents to its new owner, keyed by slot so
+// placement survives the move.
+message Transfer {
+  QueueSpec spec = 1;
+  map<uint32, SlotMessages> by_slot = 2;
+}
+
+message SubscribeRequest {
+  string gateway_id = 1;
+}
+
+// WorkAvailable is pushed when a queue on this node gains work. A gateway keeps
+// one stream per node, not one per queue and not one per waiting consumer.
+message WorkAvailable {
+  string org = 1;
+  string name = 2;
+  uint32 best_priority = 3;
+}
+
+message HealthResponse {
+  string status = 1;
+  string node_id = 2;
+}
+
+service QueueService {
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
+  rpc Dequeue(DequeueRequest) returns (DequeueResponse);
+  rpc Ack(AckRequest) returns (Empty);
+  rpc Nack(NackRequest) returns (Empty);
+
+  rpc Stats(StatsRequest) returns (QueueStats);
+  rpc StatsAll(Empty) returns (StatsAllResponse);
+
+  rpc Drop(StatsRequest) returns (Empty);
+  rpc Freeze(FreezeRequest) returns (Transfer);
+  rpc Absorb(Transfer) returns (Empty);
+
+  // Subscribe is how a parked consumer is woken. Notification and dequeue are
+  // separate so only one dequeue is ever issued: fanning a waiting dequeue out
+  // to several nodes would lease messages nobody is processing.
+  rpc Subscribe(SubscribeRequest) returns (stream WorkAvailable);
+
+  rpc Health(Empty) returns (HealthResponse);
+}

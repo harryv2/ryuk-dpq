@@ -1,393 +1,214 @@
 # LLD 6 — Metrics and Testing
 
-What the system reports, and how it is proven correct.
-
-Implements: HLD Sections 15, 19.
+Implements HLD §17, §21.
 
 ---
 
-# Part A — Metrics
+## 1. Where the numbers come from
 
-## 1. How counters are kept
-
-Every counter is updated as things happen, under the lock that already protects the
-structure it describes. Nothing is computed by walking a queue.
+Every counter is maintained **under a slot's lock as messages move**, never
+computed by scanning:
 
 ```go
 type slotStats struct {
-    enqueued, acked, expired, requeued, deadLettered, escapes uint64
-    ready [3]int32          // bucketed by priority: low, medium, high
-    inflight int32
+    ready    [3]int64   // bucketed low / medium / high
+    inflight int64
+    delayed  int64
+    bytes    int64
+    enqueued, acked, expired, requeued, deadLettered uint64
 }
 ```
 
-`ready` is kept as three buckets rather than 101 counters because that is what gets
-reported (§3), and maintaining the aggregate incrementally avoids summing on scrape.
+So reporting does not get slower as queues get deeper.
 
-Reading a slot's stats takes its lock briefly. Scraping a node walks its slots one at
-a time, never holding two locks, so a scrape cannot block traffic across a queue.
+`ready` is bucketed into three rather than kept per priority level, because that
+is the granularity metrics are reported at and 101 counters per slot would cost
+more than the priority lists themselves.
 
-**Oldest message age** is the only value not stored directly. It is the enqueue time
-of the head of each non-empty band, minimised across slots:
+**Nothing is written to the log.** After a crash the node replays, rebuilds its
+structures, and the counters fall out of the rebuilt state — so there is no second
+thing to keep consistent.
+
+`OldestAge` aggregates as a **maximum** across slots, never a sum, and is clamped
+at zero so a clock adjustment cannot produce a negative age.
+
+---
+
+## 2. Collection
+
+**The gateway collects. Nothing scrapes a node.**
 
 ```go
-func (s *slot) oldestReady(now time.Time) time.Duration {
-    oldest := time.Duration(0)
-    for p := range s.bands {                    // sparse: only bands in use
-        g, ok := s.peekGroup(p)
-        if !ok { continue }
-        m, ok := g.msgs.front()
-        if !ok || m.expired(now) { continue }
-        if age := now.Sub(m.EnqueuedAt); age > oldest { oldest = age }
-    }
-    return max(0, oldest)
+for _, m := range l.members.Members() {
+    nodeID, all, err := l.nodes.StatsAll(ctx, m.Addr)
+    ...
 }
 ```
 
-Bounded by the number of priorities actually in use, not by queue depth. The clamp at
-zero matters after a failover, where a new leader's clock may read earlier than a
-message's recorded enqueue time (HLD §11).
+One request per node every five seconds returns every queue that node holds. Fifty
+machines cost fifty requests whether the cluster holds ten queues or ten thousand.
+
+Three reasons not to let a monitoring system scrape nodes:
+
+**Nodes have no public listener.** Giving them one for metrics would undo the
+boundary between tiers for a monitoring convenience.
+
+**A node holds slots, not queues.** Something has to add them up. Doing it in the
+monitoring system means the dashboard and the stats endpoint are two aggregation
+paths that can disagree, and when they do nobody knows which to believe.
+
+**Scrape timing differs per target.** Summing across machines scraped at different
+moments mixes samples up to a full interval apart.
 
 ---
 
-## 2. What is exported
-
-Required by the specification:
+## 3. Three endpoints, one cache
 
 ```
-ryuk_queue_oldest_message_age_seconds{org, queue}
-ryuk_queue_ready_messages{org, queue, priority}      # low | medium | high
-ryuk_queue_inflight_messages{org, queue}
-ryuk_queue_enqueued_total{org, queue}
-ryuk_queue_acknowledged_total{org, queue}
-ryuk_queue_dead_lettered_total{org, queue}
+GET /v1/queues/{name}/stats     one queue, JSON
+GET /v1/metrics                 every queue in the caller's org, JSON
+GET /metrics                    the same numbers in Prometheus text format
 ```
 
-Everything else:
+All three read the collector's cache, so they cannot disagree.
 
-```
-ryuk_queue_starvation_escapes_total{org, queue}      # capacity signal
-ryuk_queue_expired_total{org, queue}
-ryuk_queue_redelivered_total{org, queue}
-ryuk_queue_groups_locked{org, queue}
-ryuk_slot_depth{org, queue, slot}                    # finds a hot group
-ryuk_sweep_lag_seconds{node}
-ryuk_wal_fsync_seconds{node, quantile}
-ryuk_wal_pending_bytes{node}
-ryuk_placement_version{node}                         # detects a stale watcher
-ryuk_gateway_stale_route_total{node}
+`/v1/queues/{name}/stats` is the exception: for a **normal** queue it asks the
+owner directly rather than serving the cache, because that queue lives on one
+machine and one request gives an exact answer.
+
+```json
+{ "messages": 128401, "inFlight": 892, "exact": true, "ownerNode": "node-abc" }
 ```
 
-`starvation_escapes_total` is the one to alert on. If it is climbing, consumers
-cannot keep up with urgent work and low-priority work is only moving because of the
-reserve (HLD §13). No required metric shows this.
+For a **distributed** queue it asks every machine holding a slot and sums, reports
+`exact: false`, and counts machines it could not reach:
 
-`placement_version` is a debugging metric that earns its place: a node or gateway
-stuck on an old version is the cause of a whole class of confusing routing failures,
-and comparing the gauge across the fleet finds it in seconds.
+```json
+{ "messages": 124800, "exact": false, "unavailableSlots": 3 }
+```
+
+Reporting the gap rather than quietly under-reporting is the difference between a
+number somebody trusts and one they eventually stop believing.
+
+`/metrics` is hand-written text formatting, about forty lines and no dependency:
+
+```
+ryuk_queue_ready_messages{org="org_acme",queue="orders",priority="high"} 400
+ryuk_queue_inflight_messages{org="org_acme",queue="orders"} 892
+ryuk_queue_oldest_message_age_seconds{org="org_acme",queue="orders"} 43.0
+ryuk_queue_enqueued_total{org="org_acme",queue="orders"} 128401
+ryuk_queue_starvation_escapes_total{org="org_acme",queue="orders"} 0
+```
+
+**Starvation escapes is the number worth alerting on.** If it is climbing, workers
+cannot keep up with urgent work and low-priority work is only moving because of
+the safety net. None of the required metrics show that.
 
 ---
 
-## 3. Cardinality
+## 4. Testing
 
-Priority is reported in **three buckets, not 101 levels**. A hundred label values per
-queue is a monitoring problem rather than useful detail.
+### The two decisions that make it testable
 
-The org label is the real risk. A thousand orgs with ten queues each is 10,000 series
-per metric, and there are ten metrics.
+**The clock is supplied, not read from the system.** Visibility timeouts, expiry,
+delayed release and the starvation threshold are all tested by advancing a fake
+clock. Sleeping would be slow, unreliable, and could not test a twelve-hour
+timeout at all.
 
-```go
-func (r *Registry) orgLabel(org string) string {
-    if r.tracked.Has(org) { return org }
-    return "other"
-}
-```
+**Background work is callable directly.** `Sweep()` runs the real production path
+without waiting for a timer.
 
-The largest tenants by volume are reported individually and the rest are aggregated,
-with the tracked set recomputed hourly. Above a few hundred orgs this is the
-difference between a monitoring system that works and one that falls over (HLD §15).
+### Engine
 
-`ryuk_slot_depth` carries a slot label, which is 64 series per queue. It is reported
-**only for slots above a depth threshold**, since its purpose is finding a hot group
-and an even queue has nothing to say.
+`engine_test.go` — one test per behaviour, all deterministic:
 
----
-
-## 4. Endpoints
-
-```
-GET /metrics                      Prometheus text, counters, node-local
-GET /v1/queues/{name}/stats       JSON, includes rates over a one-minute window
-```
-
-Counters, not rates, on the Prometheus endpoint. Computing rates is the monitoring
-system's job, and doing it here loses information and breaks when the scrape interval
-changes.
-
-The specification asks for throughput as a rate per second, so the JSON endpoint
-returns computed rates as well. A caller who just wants a number gets one without
-running Prometheus.
-
-Aggregation across machines is Prometheus's job:
-
-```promql
-sum by (org, queue) (ryuk_queue_ready_messages)
-max by (org, queue) (ryuk_queue_oldest_message_age_seconds)   # max, not sum
-```
-
-Building fan-out aggregation into the service would mean an RPC to every node on
-every scrape, duplicating what the monitoring system already does.
-
----
-
-# Part B — Testing
-
-## 5. Layers
-
-| Layer | Runs against | Catches |
-|---|---|---|
-| Unit | The engine, no transport | State machine mistakes |
-| Concurrency | The engine, with the race detector | Missing synchronisation |
-| Property | Engine vs. a naive model | Bugs in the fast structures |
-| Chaos | Engine with misbehaving workers | Lease and retry mistakes |
-| Recovery | Engine plus a real log | Durability mistakes |
-| Integration | Gateway plus nodes | Routing and translation mistakes |
-| Benchmark | Everything | Regressions in the latency budget |
-
-The engine has no imports outside the standard library (LLD 1 §1), so the first five
-run at full speed with no server, no disk and no network.
-
----
-
-## 6. Deterministic time
-
-Nothing sleeps.
-
-```go
-clk := queue.NewFakeClock()
-q := queue.New(cfg, clk, cluster)
-
-id, _ := q.Enqueue(payload, 75, "")
-_, receipt, _ := q.Dequeue()
-
-clk.Advance(31 * time.Second)          // past the visibility timeout
-q.SweepExpiredLeases()
-
-_, r2, ok := q.Dequeue()
-require.True(t, ok)                    // redelivered
-require.NotEqual(t, receipt.Epoch, r2.Epoch)
-require.Error(t, q.Ack(receipt))       // the old receipt is now stale
-```
-
-Two design decisions exist mostly to make this possible: the clock is supplied rather
-than read from the system, and sweeps are callable directly instead of only firing on
-a timer. Both are in LLD 1.
-
-A sleep-based version of the test above would take 31 seconds, would be flaky under
-load, and could not test a 12-hour timeout at all.
-
----
-
-## 7. Concurrency
-
-```go
-func TestConcurrentProducersAndConsumers(t *testing.T) {
-    q := queue.New(cfg, queue.SystemClock{}, cluster)
-
-    const (
-        producers  = 16
-        consumers  = 16
-        perProducer = 5000
-    )
-
-    sent := &sync.Map{}     // id -> priority
-    got  := &sync.Map{}     // id -> ack count
-
-    // ... producers enqueue, consumers dequeue and ack ...
-
-    // 1. conservation
-    require.Equal(t, producers*perProducer, count(sent))
-    // 2. nothing lost
-    sent.Range(func(id, _ any) bool {
-        _, ok := got.Load(id)
-        require.True(t, ok, "message %v never delivered", id)
-        return true
-    })
-    // 3. nothing acknowledged twice
-    got.Range(func(_, n any) bool {
-        require.Equal(t, 1, n, "double acknowledgment")
-        return true
-    })
-}
-```
-
-Run with `-race`. The race detector reports unsynchronised access directly rather
-than waiting for a bug to appear by chance, which is why it is the methodology and
-not a stress test that happens to pass.
-
-### Group ordering, the test that finds real bugs
-
-```go
-func TestGroupOrderUnderConcurrency(t *testing.T) {
-    // 50 groups, 200 messages each, random priorities, 32 consumers
-    // every consumer records (group, sequence) as it receives
-
-    for group, seen := range delivered {
-        require.IsIncreasing(t, seen, "group %s delivered out of order", group)
-    }
-}
-```
-
-Random priorities are the point. A group whose messages span priorities changes bands
-as its head is consumed (LLD 1 §4), which exercises the version-stamped band entries.
-That is where the subtle bug lives: clearing `inBand` on a stale entry lets a group be
-dispatched twice, and only this test would notice.
-
----
-
-## 8. Property testing
-
-```go
-func TestAgainstModel(t *testing.T) {
-    real  := queue.New(cfg, clk, cluster)
-    model := newNaiveModel(cfg)     // one lock, one list, no slots, no bitmap
-
-    for i := 0; i < 100000; i++ {
-        op := randomOp(rng)
-        r1, r2 := op.Apply(real), op.Apply(model)
-        require.Equal(t, r2, r1, "diverged at op %d: %v", i, op)
-    }
-}
-```
-
-The model is written to be obviously correct rather than fast: one mutex, one slice,
-linear scan for the highest priority. Any divergence is a bug in the fast structures —
-the bitmap, the band deques, the version stamps — and a hand-written test would not
-have thought to try the sequence that found it.
-
----
-
-## 9. Chaos
-
-Consumers that behave badly, mixed at random:
-
-| Behaviour | What it should exercise |
+| Test | What it pins down |
 |---|---|
-| Take a message and never acknowledge | Lease expiry and redelivery |
-| Acknowledge twice | Idempotence |
-| Acknowledge with a stale receipt | Epoch rejection |
-| Negative-acknowledge repeatedly | Retry counting and dead-lettering |
-| Acknowledge after the queue is deleted | Graceful rejection |
+| `TestPriorityOrder` | HIGH before MEDIUM before LOW |
+| `TestFIFOWithinPriority` | Fifty messages come out in submission order |
+| `TestGroupOrderAndLock` | One message per group in flight; the next waits for the ack |
+| `TestVisibilityTimeoutRedelivers` | Redelivery, attempt count, and the stale receipt rejected |
+| `TestDeadLetterAfterMaxRetries` | Dead-lettered on the right attempt, not before |
+| `TestRetryKeepsGroupOrder` | A retried message returns to the front of its group |
+| `TestTTLExpiry` | An expired message is never delivered |
+| `TestExpiredInFlightStillAcks` | Expiry stops delivery, not completion |
+| `TestStarvationReserve` | A starved low-priority message is served under sustained high load |
+| `TestNoStarvationEscapeWhenNothingIsStuck` | Priority stays strict when nothing has waited |
+| `TestIncarnationRejectsOldReceipt` | A receipt from a previous run is refused |
 
-Every invariant from §7 must still hold, plus one more: **no message is ever out with
-two consumers at the same time**. Consumers record intervals and the checker looks for
-overlaps on the same message id.
+### Concurrency
 
----
+`concurrency_test.go`, run under `-race`. The race detector is the method; a
+stress test that happens to pass proves very little.
 
-## 10. Recovery
+Eight producers and eight consumers move four thousand messages, then:
+
+1. Everything submitted reached exactly one end state
+2. Nothing acknowledged twice
+3. Nothing delivered to two workers at once
+4. Within a group, delivery order matched submission order
+5. The queue drained
+
+A second test has half the workers vanish without acknowledging while a sweeper
+drives redelivery, and asserts the same invariants still hold.
+
+**Assertion 4 found a real bug.** Sequence numbers were assigned *before* the slot
+lock, so two concurrent producers could take 100 and 101 and then insert in the
+opposite order. The fix makes the lock the point that orders both:
 
 ```go
-func TestSurvivesKill(t *testing.T) {
-    dir := t.TempDir()
-    // subprocess: enqueue 10k, dequeue and ack half, then SIGKILL mid-flight
-    acked := runAndKill(t, dir)
-
-    q := recoverQueue(t, dir)
-    remaining := drain(q)
-
-    for id := range acked {
-        require.NotContains(t, remaining, id, "acknowledged message came back")
-    }
-    require.Equal(t, 10000-len(acked), len(remaining))
-}
+s.mu.Lock()
+// Seq is assigned here, not earlier: the lock is the point that orders two
+// concurrent producers, so sequence numbers and list position have to be
+// decided together or a group can end up out of order.
+m.Seq = q.nextSeq()
 ```
 
-A real subprocess and a real `SIGKILL`, because the failure being tested is the
-process disappearing without running any cleanup. An in-process simulation would let
-deferred code run and would not exercise the torn-tail path.
+### Write-ahead log
 
-Paired with the log-level tests in LLD 2 §14: torn tail at every byte offset, single
-bit flips, and replaying one log twice to prove the result is identical.
+`wal_test.go`, against a real temporary directory. The one that matters is
+`TestTornTailIsTruncated`: it appends junk to a good log, replays, asserts the
+good records survive, then appends again and re-reads — which is what proves the
+truncation happened rather than the read merely stopping.
 
----
+### Gateway
 
-## 11. Harnesses
+`logic_test.go`, with mockgen-generated repos:
 
-Two commands, which are also the producer and consumer stubs the assignment asks for.
-
-```
-cmd/ryuk-load/
-    -queues 4 -producers 32 -consumers 32 -rate 5000
-    -priorities 25,50,75 -groups 100 -ack-rate 0.95 -crash-rate 0.01
-```
-
-Runs real HTTP against a running gateway and prints observed throughput, latency
-percentiles, and whether the invariants held.
-
-```
-cmd/ryuk-verify/
-```
-
-Consumes a queue and checks the invariants continuously, so it can run alongside a
-chaos test or a rebalance. This is what proves a slot migration did not lose or
-duplicate anything: start it, move slots underneath it, and see whether it complains.
-
----
-
-## 12. Benchmarks
-
-```
-BenchmarkEnqueue                       measures the submission path
-BenchmarkDequeue                       measures dispatch
-BenchmarkDequeueContended/slots=1      shows why striping exists
-BenchmarkDequeueContended/slots=64
-BenchmarkDispatchPriorities/n=3        shows the bitmap is flat
-BenchmarkDispatchPriorities/n=101
-BenchmarkWALAppend/sync=interval
-BenchmarkWALAppend/sync=always
-```
-
-The two pairs exist to demonstrate specific claims rather than to produce numbers.
-`slots=1` against `slots=64` shows lock striping working. `n=3` against `n=101` shows
-that priority count does not affect dispatch cost, which is the whole reason for the
-bitmap (LLD 1 §5.1).
-
-Benchmarks run in CI with a regression threshold, since the latency budget in HLD §16
-is only credible if something checks it.
-
----
-
-## 13. Integration
-
-Started with a gateway and three nodes in one process, wired over real gRPC:
-
-| Test | Asserts |
+| Test | What it pins down |
 |---|---|
-| End to end | Create, enqueue, dequeue, acknowledge, metrics all agree |
-| Stale placement map | Gateway retries once and succeeds |
-| Node dies mid-dequeue | Unconfirmed leases release immediately, not after a timeout |
-| Gateway dies mid-dequeue | Same, from the other side |
-| Slot migration under load | No loss, no duplication, group order preserved |
-| **Tenant isolation** | Two orgs, same queue names, same group keys, no shared slot |
-| Queue deleted under load | In-flight work finishes, new work rejected |
-| Quota exceeded | 503 with `Retry-After`, nothing already accepted is dropped |
+| `TestCreateQueueRejectsStarvationAboveTTL` | A config that would silently shred low-priority work is refused |
+| `TestConfigCacheAvoidsSecondRead` | Three reads, one database call |
+| `TestMissingQueueIsCachedBriefly` | A typo in a loop does not hammer Postgres |
+| `TestEnqueueFailsWhenOwnerIsDown` | 503, and no reassignment |
+| `TestPriorityParsing` | Numbers and names, and what is rejected |
 
-The tenant isolation test is the one that would catch a missing separator byte in the
-slot hash (LLD 1 §8), where org `a` queue `bc` and org `ab` queue `c` collide. That
-bug is invisible in every single-tenant test and corrupts ordering in production.
+### End to end
 
----
+`backend/tests/harness` drives the real gateway API:
 
-## 14. What is not tested, and why
+```bash
+go run ./backend/tests/harness -producers 8 -consumers 8 -messages 500
+go run ./backend/tests/harness -queue h2 -distributed -producers 8 -consumers 8 -messages 300
+```
 
-| Not covered | Reason |
+It checks the same five invariants against a running cluster, for both queue
+types.
+
+**Each producer owns its own groups.** With several producers writing to one
+group there is no defined submission order to check delivery against — an early
+version of the harness got this wrong and reported inversions that were an
+artifact of the test, not the server.
+
+### Cluster behaviour
+
+Verified by hand against `docker compose`:
+
+| Scenario | Result |
 |---|---|
-| Replication and quorum commit | Not built (HLD §18) |
-| Coordinator election under partition | Needs multi-process network control |
-| Cross-region behaviour | No second region |
-| Placement group migration | Slot migration is tested; group-level is coordinator logic |
-| Sustained multi-hour load | CI time; the harness supports it manually |
-
-Listing these matters as much as the coverage. A test suite that does not say what it
-skips reads as though it covers everything.
+| Three nodes, create a queue | Placed on one, exact counts |
+| Distributed queue, 64 slots | Spread 22/21/21 across three nodes |
+| Scale 3 → 6 | Slots redistributed across all six, messages intact |
+| Kill the owning node | Normal queue 503, others unaffected, placement not reassigned |
+| Restart it | Replays, queue back with its messages, incarnation bumped |
+| Harness, both queue types | All invariants pass |

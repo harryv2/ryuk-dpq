@@ -1,0 +1,321 @@
+package engine
+
+import (
+	"container/heap"
+	"math"
+	"math/bits"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type bandEntry struct {
+	g   *group
+	ver uint64
+}
+
+type lease struct {
+	msg      *Message
+	g        *group
+	epoch    uint64
+	deadline time.Time
+}
+
+// slot holds messages for one queue. One lock covers everything in it: handing
+// out a message mutates five structures and they have to move together.
+type slot struct {
+	id uint16
+
+	mu       sync.Mutex
+	bandMask [2]uint64
+	bands    map[Priority]*deque[bandEntry]
+	groups   map[string]*group
+	inflight map[string]*lease
+	timers   timerHeap
+	delayed  delayHeap
+	epochSeq uint64
+	st       slotStats
+
+	// read without the lock by the dispatcher
+	hint    atomic.Uint32 // highest non-empty band + 1, 0 means empty
+	headSeq atomic.Uint64
+}
+
+func newSlot(id uint16) *slot {
+	s := &slot{
+		id:       id,
+		bands:    make(map[Priority]*deque[bandEntry]),
+		groups:   make(map[string]*group),
+		inflight: make(map[string]*lease),
+	}
+	s.headSeq.Store(math.MaxUint64)
+	return s
+}
+
+func (s *slot) setBand(p Priority)   { s.bandMask[p>>6] |= 1 << (p & 63) }
+func (s *slot) clearBand(p Priority) { s.bandMask[p>>6] &^= 1 << (p & 63) }
+
+// highestBand is a superset: a set bit means the band deque is non-empty, not
+// that it will yield a message. Never a false negative.
+func (s *slot) highestBand() (Priority, bool) {
+	if w := s.bandMask[1]; w != 0 {
+		return Priority(127 - bits.LeadingZeros64(w)), true
+	}
+	if w := s.bandMask[0]; w != 0 {
+		return Priority(63 - bits.LeadingZeros64(w)), true
+	}
+	return 0, false
+}
+
+func (s *slot) pushGroup(g *group) {
+	m, ok := g.msgs.front()
+	if !ok || g.locked {
+		return
+	}
+	g.version++
+	g.band = m.Priority
+	g.inBand = true
+
+	d := s.bands[m.Priority]
+	if d == nil {
+		d = &deque[bandEntry]{}
+		s.bands[m.Priority] = d
+	}
+	d.pushBack(bandEntry{g: g, ver: g.version})
+	s.setBand(m.Priority)
+}
+
+func (s *slot) takeGroup(p Priority) *group {
+	d := s.bands[p]
+	if d == nil {
+		s.clearBand(p)
+		return nil
+	}
+	for {
+		e, ok := d.popFront()
+		if !ok {
+			break
+		}
+		// A stale entry means the group already has a newer live one. Clearing
+		// inBand here would let pushGroup add a second and dispatch it twice.
+		if e.ver != e.g.version {
+			continue
+		}
+		e.g.inBand = false
+		if e.g.locked || e.g.msgs.empty() {
+			continue
+		}
+		if d.empty() {
+			s.dropBand(p)
+		}
+		return e.g
+	}
+	s.dropBand(p)
+	return nil
+}
+
+func (s *slot) dropBand(p Priority) {
+	delete(s.bands, p)
+	s.clearBand(p)
+}
+
+func (s *slot) enqueue(m *Message, now time.Time) {
+	if !m.DeliverAfter.IsZero() && m.DeliverAfter.After(now) {
+		heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
+		s.st.delayed++
+		s.st.enqueued++
+		s.st.bytes += int64(len(m.Payload))
+		return
+	}
+
+	gid := m.group()
+	g := s.groups[gid]
+	if g == nil {
+		g = &group{id: gid}
+		s.groups[gid] = g
+	}
+	g.msgs.pushBack(m)
+
+	s.st.enqueued++
+	s.st.ready[bucketOf(m.Priority)]++
+	s.st.bytes += int64(len(m.Payload))
+
+	if !g.locked && !g.inBand {
+		s.pushGroup(g)
+	}
+	s.refreshHint()
+}
+
+func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Receipt, bool) {
+	g := s.takeGroup(p)
+	if g == nil {
+		s.refreshHint()
+		return nil, Receipt{}, false
+	}
+
+	var m *Message
+	for {
+		v, ok := g.msgs.popFront()
+		if !ok {
+			break
+		}
+		if v.expired(now) {
+			s.dropExpired(v)
+			continue
+		}
+		m = v
+		break
+	}
+	if m == nil {
+		s.dropGroupIfIdle(g)
+		s.refreshHint()
+		return nil, Receipt{}, false
+	}
+
+	m.Attempts++
+	s.epochSeq++
+	g.locked = true
+
+	l := &lease{msg: m, g: g, epoch: s.epochSeq, deadline: now.Add(vis)}
+	s.inflight[m.ID] = l
+	heap.Push(&s.timers, timerEntry{id: m.ID, epoch: l.epoch, at: l.deadline})
+
+	s.st.ready[bucketOf(m.Priority)]--
+	s.st.inflight++
+	s.refreshHint()
+
+	// A copy, not the live message. The slot keeps mutating the original --
+	// Attempts on the next delivery, DeliverAfter on a delayed retry -- and the
+	// caller reads what it was handed after this lock is gone. Sharing the
+	// pointer is a data race, and it lets a stale attempt count reach the log.
+	// The payload slice is shared, which is safe because nothing writes to it.
+	out := *m
+	return &out, Receipt{Slot: s.id, MessageID: m.ID, Epoch: l.epoch}, true
+}
+
+func (s *slot) ack(r Receipt) error {
+	l, ok := s.inflight[r.MessageID]
+	if !ok {
+		return ErrNotInFlight
+	}
+	// The lease moved on. Accepting this would delete a message another worker
+	// is processing.
+	if l.epoch != r.Epoch {
+		return ErrLeaseExpired
+	}
+	delete(s.inflight, r.MessageID)
+	s.st.inflight--
+	s.st.acked++
+	s.st.bytes -= int64(len(l.msg.Payload))
+	s.unlock(l.g)
+	s.refreshHint()
+	return nil
+}
+
+func (s *slot) unlock(g *group) {
+	g.locked = false
+	if g.msgs.empty() {
+		s.dropGroupIfIdle(g)
+		return
+	}
+	if !g.inBand {
+		s.pushGroup(g)
+	}
+}
+
+func (s *slot) dropGroupIfIdle(g *group) {
+	if !g.locked && g.msgs.empty() && !g.inBand {
+		delete(s.groups, g.id)
+	}
+}
+
+func (s *slot) dropExpired(m *Message) {
+	s.st.expired++
+	s.st.ready[bucketOf(m.Priority)]--
+	s.st.bytes -= int64(len(m.Payload))
+}
+
+// headMessage returns the first deliverable message of a band without removing
+// anything. Used by the hint and the starvation scan.
+func (s *slot) headMessage(p Priority) (*Message, bool) {
+	d := s.bands[p]
+	if d == nil {
+		return nil, false
+	}
+	limit := d.len()
+	if limit > 8 {
+		limit = 8 // it is a hint, not an answer
+	}
+	for i := 0; i < limit; i++ {
+		e := d.at(i)
+		if e.ver != e.g.version || e.g.locked {
+			continue
+		}
+		if m, ok := e.g.msgs.front(); ok {
+			return m, true
+		}
+	}
+	return nil, false
+}
+
+func (s *slot) refreshHint() {
+	p, ok := s.highestBand()
+	if !ok {
+		s.hint.Store(0)
+		s.headSeq.Store(math.MaxUint64)
+		return
+	}
+	s.hint.Store(uint32(p) + 1)
+	if m, ok := s.headMessage(p); ok {
+		s.headSeq.Store(m.Seq)
+	} else {
+		s.headSeq.Store(math.MaxUint64)
+	}
+}
+
+// oldestBandBefore walks bands from the lowest priority up, which is where
+// starvation happens, and returns the first whose head has waited too long.
+func (s *slot) oldestBandBefore(cutoff time.Time) (Priority, bool) {
+	for w := 0; w < 2; w++ {
+		word := s.bandMask[w]
+		for word != 0 {
+			bit := bits.TrailingZeros64(word)
+			word &^= 1 << uint(bit)
+			p := Priority(w*64 + bit)
+			if m, ok := s.headMessage(p); ok && m.EnqueuedAt.Before(cutoff) {
+				return p, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func (s *slot) stats(now time.Time) Stats {
+	st := Stats{
+		Ready:        s.st.ready,
+		InFlight:     s.st.inflight,
+		Delayed:      s.st.delayed,
+		Bytes:        s.st.bytes,
+		Enqueued:     s.st.enqueued,
+		Acked:        s.st.acked,
+		Expired:      s.st.expired,
+		Requeued:     s.st.requeued,
+		DeadLettered: s.st.deadLettered,
+	}
+	for w := 0; w < 2; w++ {
+		word := s.bandMask[w]
+		for word != 0 {
+			bit := bits.TrailingZeros64(word)
+			word &^= 1 << uint(bit)
+			if m, ok := s.headMessage(Priority(w*64 + bit)); ok {
+				if age := now.Sub(m.EnqueuedAt); age > st.OldestAge {
+					st.OldestAge = age
+				}
+			}
+		}
+	}
+	if st.OldestAge < 0 {
+		st.OldestAge = 0
+	}
+	return st
+}

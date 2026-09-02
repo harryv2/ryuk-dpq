@@ -1,0 +1,18 @@
+# A node holds messages and answers gRPC. It has no HTTP surface and no UI, so
+# neither is built into it.
+
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY backend ./backend
+RUN CGO_ENABLED=0 go build -o /out/ryuk-node ./backend/cmd/ryuk-node
+
+FROM alpine:3.20
+# The data directory is a mount point, so it has to exist and be owned by the
+# unprivileged user before the volume is attached.
+RUN adduser -D -u 10001 ryuk && mkdir -p /data/nodes && chown -R ryuk:ryuk /data
+COPY --from=build /out/ryuk-node /usr/local/bin/
+USER ryuk
+EXPOSE 9090
+ENTRYPOINT ["ryuk-node"]
