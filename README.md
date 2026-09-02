@@ -1,3 +1,7 @@
+
+
+
+
 # Ryuk — Distributed Priority Queue
 
 A priority queue service. Producers submit work with a priority and an optional
@@ -16,17 +20,7 @@ tracks each message from submission to completion, and reports metrics.
 
 ## Demo
 
-**[docs/demo/ryuk-demo-compressed.mp4](docs/demo/ryuk-demo-compressed.mp4)** (4.8 MB)
-— an 80-second walkthrough against a live four-node cluster: create a queue, send
-two HIGH, one MEDIUM and one LOW, then poll them one at a time through
-acknowledge and nack, watching the ordering and retry counters move.
-
-`docs/demo/ryuk-demo.mp4` is the full-quality render, and the
-[HyperFrames source](docs/demo/composition) rebuilds either one.
-
-> For a player embedded in the page rather than a download link, drag the
-> compressed file into a GitHub issue, pull request or release. GitHub returns a
-> `user-attachments` URL that renders inline; a repository path does not.
+https://github.com/user-attachments/assets/adb64610-61bf-4f6d-a1fc-3acc24502eed
 
 ---
 
