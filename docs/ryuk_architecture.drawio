@@ -1,0 +1,78 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram name="Architecture" id="arch">
+    <mxGraphModel dx="1100" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lblClients" value="Clients" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="45" width="120" height="30" as="geometry" /></mxCell>
+        <mxCell id="lblGw" value="Gateway tier&#10;stateless" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="20" y="240" width="130" height="40" as="geometry" /></mxCell>
+        <mxCell id="lblNode" value="Node tier&#10;owns the data" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#82b366;" vertex="1" parent="1"><mxGeometry x="20" y="440" width="130" height="40" as="geometry" /></mxCell>
+        <mxCell id="metabox" value="Metadata" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#d79b00;fontSize=13;fontStyle=1;fontColor=#d79b00;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;" vertex="1" parent="1"><mxGeometry x="760" y="215" width="230" height="350" as="geometry" /></mxCell>
+
+        <mxCell id="prod" value="Producers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="1"><mxGeometry x="170" y="40" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="cons" value="Consumers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="1"><mxGeometry x="490" y="40" width="150" height="50" as="geometry" /></mxCell>
+
+        <mxCell id="lb" value="Load balancer&#10;one address, forever" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;" vertex="1" parent="1"><mxGeometry x="170" y="135" width="470" height="50" as="geometry" /></mxCell>
+
+        <mxCell id="gw1" value="gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1"><mxGeometry x="170" y="240" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="gw2" value="gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1"><mxGeometry x="335" y="240" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="gw3" value="gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="1"><mxGeometry x="500" y="240" width="140" height="60" as="geometry" /></mxCell>
+
+        <mxCell id="bus" value="internal RPC  —  any gateway can reach any node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="170" y="350" width="470" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="n1" value="node&#10;&#10;slots&#10;leases&#10;write-ahead logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1"><mxGeometry x="170" y="430" width="140" height="110" as="geometry" /></mxCell>
+        <mxCell id="n2" value="node&#10;&#10;slots&#10;leases&#10;write-ahead logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1"><mxGeometry x="335" y="430" width="140" height="110" as="geometry" /></mxCell>
+        <mxCell id="n3" value="node&#10;&#10;slots&#10;leases&#10;write-ahead logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1"><mxGeometry x="500" y="430" width="140" height="110" as="geometry" /></mxCell>
+
+        <mxCell id="pg" value="Postgres&#10;&#10;queue configs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;verticalAlign=top;spacingTop=10;" vertex="1" parent="1"><mxGeometry x="785" y="260" width="180" height="90" as="geometry" /></mxCell>
+        <mxCell id="etcd" value="etcd&#10;&#10;placement map&#10;membership" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;verticalAlign=top;spacingTop=10;" vertex="1" parent="1"><mxGeometry x="785" y="410" width="180" height="110" as="geometry" /></mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#666666;" edge="1" parent="1" source="prod" target="lb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#666666;" edge="1" parent="1" source="cons" target="lb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="lb" target="gw1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="lb" target="gw2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="lb" target="gw3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;endArrow=none;" edge="1" parent="1" source="gw1" target="bus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;endArrow=none;" edge="1" parent="1" source="gw2" target="bus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;endArrow=none;" edge="1" parent="1" source="gw3" target="bus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;" edge="1" parent="1" source="bus" target="n1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;" edge="1" parent="1" source="bus" target="n2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;" edge="1" parent="1" source="bus" target="n3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e12" value="queue configs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="gw3" target="pg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" value="slot map, membership" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n3" target="etcd"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="note" value="Gateways read and write queue configs, and watch the slot map. Nodes read queue configs, and own the slot map and membership.&#10;Nodes have no public listener — only gateways and other nodes can reach them.&#10;Neither store sits on the path a message takes." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="170" y="590" width="820" height="55" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Message lifecycle" id="life">
+    <mxGraphModel dx="1100" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="sub" value="submitted" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="180" width="110" height="50" as="geometry" /></mxCell>
+        <mxCell id="del" value="delayed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1"><mxGeometry x="210" y="60" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="avail" value="available" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="390" y="180" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="infl" value="in flight" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="600" y="180" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="ack" value="deleted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1"><mxGeometry x="820" y="90" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="dlq" value="dead-letter queue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1"><mxGeometry x="820" y="280" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="exp" value="expired" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1"><mxGeometry x="390" y="380" width="120" height="50" as="geometry" /></mxCell>
+
+        <mxCell id="l1" value="with a release time" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="sub" target="del"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="sub" target="avail"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l3" value="time reached" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="del" target="avail"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l4" value="dequeue" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=1;" edge="1" parent="1" source="avail" target="infl"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l5" value="acknowledged" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;" edge="1" parent="1" source="infl" target="ack"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l6" value="out of retries" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="infl" target="dlq"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l7" value="lease expired or handed back,&#10;retries left" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="infl" target="avail"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="660" y="310" /><mxPoint x="450" y="310" /></Array></mxGeometry></mxCell>
+        <mxCell id="l8" value="TTL passed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;strokeColor=#b85450;" edge="1" parent="1" source="avail" target="exp"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="n1" value="A message is either available or in flight, never both.&#10;A message that expires while in flight can still be acknowledged — the work is already done." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="40" y="470" width="700" height="40" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
