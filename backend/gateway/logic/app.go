@@ -28,6 +28,7 @@ type GatewayLogicInterface interface {
 	Nack(context.Context, entity.NackRequest) error
 
 	Stats(context.Context, string, string) (entity.QueueStatsResponse, error)
+	Timeseries(context.Context, string, string, string) (entity.TimeseriesResponse, error)
 	Metrics(context.Context, string) ([]entity.QueueStatsResponse, error)
 	Cluster(context.Context) (entity.ClusterResponse, error)
 
@@ -41,14 +42,16 @@ type GatewayLogic struct {
 	slots   entity.SlotPlacementTableRepo
 	nodes   entity.NodeRepo
 	members entity.MembershipRepo
+	series  entity.TimeseriesRepo
 
 	wait    *waiters
 	subMu   sync.Mutex
 	subOpen map[string]bool
 
-	cache *inmemorycache.TTL[string, entity.QueueConfig]
-	stats *inmemorycache.TTL[string, entity.NodeStats]
-	owner *inmemorycache.TTL[string, string] // queue key -> node id, from the last collection
+	// One cache for every kind of value, each under its own key prefix. Reads
+	// and writes go through the helpers in cache-logic.go, so no caller here
+	// decides a TTL or handles a miss itself.
+	cache *inmemorycache.InMemoryCache
 }
 
 func New(
@@ -58,6 +61,7 @@ func New(
 	slots entity.SlotPlacementTableRepo,
 	nodes entity.NodeRepo,
 	members entity.MembershipRepo,
+	series entity.TimeseriesRepo,
 ) *GatewayLogic {
 	if cfg.CacheTTL <= 0 {
 		cfg.CacheTTL = 30 * time.Second
@@ -72,11 +76,10 @@ func New(
 		slots:   slots,
 		nodes:   nodes,
 		members: members,
+		series:  series,
 		wait:    newWaiters(),
 		subOpen: map[string]bool{},
-		cache:   inmemorycache.New[string, entity.QueueConfig](cfg.CacheTTL),
-		stats:   inmemorycache.New[string, entity.NodeStats](3 * cfg.CollectEvery),
-		owner:   inmemorycache.New[string, string](3 * cfg.CollectEvery),
+		cache:   inmemorycache.NewInMemoryCache(log),
 	}
 }
 

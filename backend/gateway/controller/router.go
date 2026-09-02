@@ -15,6 +15,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/queues/{name}/messages/ack", h.withOrg(h.Ack))
 	mux.HandleFunc("POST /v1/queues/{name}/messages/nack", h.withOrg(h.Nack))
 	mux.HandleFunc("GET /v1/queues/{name}/stats", h.withOrg(h.Stats))
+	mux.HandleFunc("GET /v1/queues/{name}/timeseries", h.withOrg(h.Timeseries))
 	mux.HandleFunc("GET /v1/metrics", h.withOrg(h.Metrics))
 	mux.HandleFunc("GET /v1/cluster", h.Cluster)
 	mux.HandleFunc("GET /metrics", h.PrometheusMetrics)

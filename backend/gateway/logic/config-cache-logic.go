@@ -10,29 +10,10 @@ import (
 // config reads through the cache. A miss means go and look, never "no such
 // queue": a queue created a moment ago has to be usable immediately.
 func (l *GatewayLogic) config(ctx context.Context, org, name string) (entity.QueueConfig, error) {
-	if c, ok := l.cache.Get(key(org, name)); ok {
-		if c.Name == "" {
-			return c, enterr.NotFound("queue")
-		}
-		return c, nil
-	}
-
-	cfg, err := l.loadConfig(ctx, org, name)
-	if err != nil {
-		if enterr.CodeOf(err) == enterr.CodeNotFound {
-			// negative result cached briefly, so a typo in a loop does not hit
-			// the database every time
-			l.cache.PutFor(key(org, name), entity.QueueConfig{}, negativeTTL)
-		}
-		return cfg, err
-	}
-	l.cache.Put(key(org, name), cfg)
-	return cfg, nil
+	return fetchViaCache(l, queueCacheKey(org, name), l.cfg.CacheTTL,
+		func() (entity.QueueConfig, error) { return l.loadConfig(ctx, org, name) })
 }
 
-// loadConfig joins the two tables. A normal queue is placed as a whole so its
-// owner is one column; a distributed queue is placed per slot, so its owners
-// come from the placement table.
 // loadConfig joins the two tables. A normal queue is placed as a whole so its
 // owner is one column; a distributed queue is placed per slot, so its owners
 // come from the placement table.
@@ -65,8 +46,6 @@ func (l *GatewayLogic) withPlacement(ctx context.Context, cfgs []entity.QueueCon
 	}
 	return cfgs
 }
-
-const negativeTTL = 2 * 1e9 // 2s
 
 // assignOwner picks where a queue should go. Rendezvous hashing is a pure
 // function of the member list, so every gateway gets the same answer and

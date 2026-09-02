@@ -45,8 +45,6 @@ func (l *QueueLogic) Freeze(spec entity.QueueSpec, only []uint16) (map[uint16][]
 
 // Absorb merges a transfer in. The engine inserts by sequence number, so
 // messages from an older generation land ahead of anything already here.
-// Absorb merges a transfer in. The engine inserts by sequence number, so
-// messages from an older generation land ahead of anything already here.
 func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 	lq, err := l.queueFor(req.Spec)
 	if err != nil {

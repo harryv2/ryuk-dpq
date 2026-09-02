@@ -47,7 +47,3 @@ func (s *Server) Absorb(ctx context.Context, req *pb.Transfer) (*pb.Empty, error
 	err := s.app.Absorb(entity.TransferRequest{Spec: specFrom(req.Spec), BySlot: bySlot})
 	return &pb.Empty{}, toStatus(err)
 }
-
-// Subscribe pushes a notification when a queue on this node gains work. The
-// gateway then issues one dequeue, so nothing is leased speculatively. When the
-// gateway goes away the stream breaks and the subscription is dropped.

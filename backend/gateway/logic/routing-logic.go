@@ -35,7 +35,7 @@ func (l *GatewayLogic) withOwner(
 		if enterr.CodeOf(err) != enterr.CodeMoved || attempt == 1 {
 			return err
 		}
-		l.cache.Evict(key(cfg.Org, cfg.Name))
+		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 		if cfg, err = l.config(ctx, cfg.Org, cfg.Name); err != nil {
 			return err
 		}
@@ -43,9 +43,6 @@ func (l *GatewayLogic) withOwner(
 	return enterr.New(enterr.CodeExhausted, "queue moved repeatedly")
 }
 
-// rankedOwners lists the machines holding this queue, most urgent work first.
-// The ranking comes from the collector's last sweep, so a stale entry costs one
-// wasted call rather than a wrong answer.
 // rankedOwners lists the machines holding this queue, most urgent work first.
 // The ranking comes from the collector's last sweep, so a stale entry costs one
 // wasted call rather than a wrong answer.
@@ -67,7 +64,7 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 			continue
 		}
 		score := int64(0)
-		if st, ok := l.stats.Get(key(cfg.Org, cfg.Name) + "@" + id); ok {
+		if st, ok := readCache[entity.NodeStats](l, nodeStatsCacheKey(cfg.Org, cfg.Name, id)); ok {
 			score = st.Ready[2]*1000 + st.Ready[1]*100 + st.Ready[0]
 		}
 		owners = append(owners, owner{addr: m.Addr, score: score})

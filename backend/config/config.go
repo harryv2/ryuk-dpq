@@ -82,6 +82,7 @@ type Gateway struct {
 	Postgres     string
 	Etcd         []string
 	CollectEvery time.Duration
+	Prometheus   string
 	CacheTTL     time.Duration
 	StaticDir    string
 	LogLevel     string
@@ -94,6 +95,7 @@ func LoadGateway() Gateway {
 		Postgres:     str("RYUK_POSTGRES", "postgres://ryuk:ryuk@localhost:5432/ryuk?sslmode=disable"),
 		Etcd:         list("RYUK_ETCD", []string{"localhost:2379"}),
 		CollectEvery: dur("RYUK_COLLECT_EVERY", 5*time.Second),
+		Prometheus:   str("RYUK_PROMETHEUS", ""),
 		CacheTTL:     dur("RYUK_CACHE_TTL", 30*time.Second),
 		StaticDir:    str("RYUK_STATIC_DIR", ""),
 		LogLevel:     str("RYUK_LOG_LEVEL", "info"),

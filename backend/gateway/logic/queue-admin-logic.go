@@ -63,7 +63,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 		return entity.CreateQueueResponse{}, enterr.New(enterr.CodeConflict,
 			"queue exists with different settings")
 	}
-	l.cache.Put(key(cfg.Org, cfg.Name), cfg)
+	writeCache(l, queueCacheKey(cfg.Org, cfg.Name), l.cfg.CacheTTL, cfg)
 
 	return entity.CreateQueueResponse{Name: cfg.Name, Created: created, OwnerNode: cfg.OwnerNode}, nil
 }
@@ -78,7 +78,7 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	if err := l.queues.SetState(ctx, org, name, entity.StateDeleting); err != nil {
 		return enterr.Internal("mark deleting", err)
 	}
-	l.cache.Evict(key(org, name))
+	l.evictCache(queueCacheKey(org, name))
 
 	if _, addr, err := l.ownerAddr(ctx, cfg, 0); err == nil && addr != "" {
 		_ = l.nodes.Drop(ctx, addr, cfg.Spec())
@@ -89,7 +89,7 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	if err := l.queues.Delete(ctx, org, name); err != nil {
 		return enterr.Internal("delete queue", err)
 	}
-	l.cache.Evict(key(org, name))
+	l.evictCache(queueCacheKey(org, name))
 	return nil
 }
 
@@ -104,7 +104,7 @@ func (l *GatewayLogic) ListQueues(ctx context.Context, org string) ([]entity.Que
 			Name: c.Name, Distributed: c.Distributed, State: string(c.State),
 			OwnerNode: c.OwnerNode, Settings: c.Settings,
 		}
-		if st, ok := l.stats.Get(key(c.Org, c.Name)); ok {
+		if st, ok := readCache[entity.NodeStats](l, statsCacheKey(c.Org, c.Name)); ok {
 			s.Messages = st.Ready[0] + st.Ready[1] + st.Ready[2]
 			s.InFlight = st.InFlight
 			s.OldestAge = st.OldestAge.Seconds()

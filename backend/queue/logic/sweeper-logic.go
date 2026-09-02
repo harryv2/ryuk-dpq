@@ -28,7 +28,6 @@ func (l *QueueLogic) Sweep() {
 }
 
 // RunSweeper drives redelivery, expiry and delayed release until stop closes.
-// RunSweeper drives redelivery, expiry and delayed release until stop closes.
 func (l *QueueLogic) RunSweeper(stop <-chan struct{}) {
 	t := time.NewTicker(l.cfg.SweepEvery)
 	defer t.Stop()

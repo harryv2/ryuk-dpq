@@ -30,11 +30,27 @@ export type QueueStats = {
   expired: number;
   redelivered: number;
   starvationEscapes: number;
+  enqueueRate: number;
+  ackRate: number;
   ownerNode?: string;
   distributed: boolean;
   exact: boolean;
   unavailableSlots?: number;
   asOf: string;
+};
+
+export type SeriesPoint = { at: string; value: number };
+export type Series = { name: string; points: SeriesPoint[] };
+
+export type Timeseries = {
+  // false when no monitoring system is configured; the page then samples the
+  // live endpoint itself, which only covers the time it has been open.
+  available: boolean;
+  range: string;
+  ready: Series[];
+  inFlight: Series[];
+  oldestAge: Series[];
+  rates: Series[];
 };
 
 export type ClusterPlacement = {
@@ -97,6 +113,9 @@ export const api = {
 
   metrics: (t: string) =>
     call<{ queues: QueueStats[] }>(t, "/v1/metrics").then((r) => r?.queues ?? []),
+
+  timeseries: (t: string, name: string, window: string) =>
+    call<Timeseries>(t, `/v1/queues/${encodeURIComponent(name)}/timeseries?window=${window}`),
 
   cluster: (t: string) =>
     call<{ nodes: ClusterNode[] }>(t, "/v1/cluster").then((r) => r?.nodes ?? []),

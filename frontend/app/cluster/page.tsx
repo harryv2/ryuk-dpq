@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { useOrg } from "@/lib/org-context";
 import { api, ClusterNode, ClusterPlacement } from "@/lib/api";
 import { Empty, Skeleton, StatCard } from "@/lib/ui";
+import { CopyButton } from "@/lib/copy";
+
+// A node runs in a container whose hostname is its short id, and that hostname
+// is what the node advertises. Pulling it out of the address gives the exact
+// argument for `docker stop`, so a failure scenario can be triggered by hand.
+function containerOf(addr: string): string {
+  return addr.split(":")[0];
+}
 
 type QueueView = {
   queue: string;
@@ -12,9 +20,8 @@ type QueueView = {
   placed: { node: string; addr: string; slots: number }[];
 };
 
-// One row per queue rather than one per node, because a distributed queue lives
-// on several nodes and counting it once per node is what made the old totals
-// read like there were more queues than there are.
+// One row per queue, not one per node: a distributed queue lives on several,
+// and counting it once per node is what made the old totals read too high.
 function byQueue(nodes: ClusterNode[], want: boolean): QueueView[] {
   const out = new Map<string, QueueView>();
   for (const n of nodes) {
@@ -119,7 +126,12 @@ export default function Cluster() {
               <tbody>
                 {q.placed.map((p) => (
                   <tr key={p.node}>
-                    <td className="mono" style={{ padding: "8px 0" }}>{p.node}</td>
+                    <td className="mono" style={{ padding: "8px 0" }}>
+                      {p.node}
+                      <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
+                        {containerOf(p.addr)}
+                      </span>
+                    </td>
                     <td className="num muted" style={{ padding: "8px 0" }}>
                       {p.slots} / {q.totalSlots} slots
                     </td>
@@ -152,40 +164,56 @@ export default function Cluster() {
         ))}
       </Section>
 
-      <h2 style={{ marginTop: 32 }}>Nodes</h2>
+      <h2 style={{ marginTop: 32, marginBottom: 4 }}>Nodes</h2>
+      <p className="muted" style={{ margin: "0 0 14px", maxWidth: 720, fontSize: 13 }}>
+        The node id survives a restart because it lives with the node&rsquo;s data; the
+        container id does not. Stop a container to watch what its queues do &mdash; a
+        single-node queue waits for it, a distributed one keeps serving the rest.
+      </p>
       <div className="card flush">
         <table>
           <thead>
             <tr>
               <th>Node</th>
-              <th>Address</th>
+              <th>Container</th>
               <th className="num">Queues</th>
               <th>State</th>
+              <th>Take it down</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={4}><Skeleton h={14} /></td>
+                <td colSpan={5}><Skeleton h={14} /></td>
               </tr>
             )}
             {!loading && nodes.length === 0 && (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={5}>
                   <Empty title="No nodes registered">
                     Start one with <span className="mono">docker compose up -d node</span>.
                   </Empty>
                 </td>
               </tr>
             )}
-            {nodes.map((n) => (
-              <tr key={n.id}>
-                <td className="mono">{n.id}</td>
-                <td className="mono muted">{n.addr}</td>
-                <td className="num">{n.queues.length}</td>
-                <td><span className="tag ok">live</span></td>
-              </tr>
-            ))}
+            {nodes.map((n) => {
+              const container = containerOf(n.addr);
+              return (
+                <tr key={n.id}>
+                  <td className="mono">{n.id}</td>
+                  <td className="mono muted">{container}</td>
+                  <td className="num">{n.queues.length}</td>
+                  <td><span className="tag ok">live</span></td>
+                  <td>
+                    <CopyButton
+                      value={`docker stop ${container}`}
+                      label="docker stop"
+                      title={`Copy: docker stop ${container}`}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

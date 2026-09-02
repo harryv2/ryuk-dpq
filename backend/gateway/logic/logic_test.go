@@ -2,8 +2,6 @@ package logic
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/mocks"
+	"github.com/harryv2/ryuk-dpq/backend/third_party/logger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -19,6 +18,7 @@ type deps struct {
 	slots   *mocks.MockSlotPlacementTableRepo
 	nodes   *mocks.MockNodeRepo
 	members *mocks.MockMembershipRepo
+	series  *mocks.MockTimeseriesRepo
 }
 
 func setup(t *testing.T) (*GatewayLogic, deps) {
@@ -29,13 +29,14 @@ func setup(t *testing.T) (*GatewayLogic, deps) {
 		slots:   mocks.NewMockSlotPlacementTableRepo(ctrl),
 		nodes:   mocks.NewMockNodeRepo(ctrl),
 		members: mocks.NewMockMembershipRepo(ctrl),
+		series:  mocks.NewMockTimeseriesRepo(ctrl),
 	}
 	d.members.EXPECT().Members().Return(nil).AnyTimes()
 	d.members.EXPECT().Lookup(gomock.Any()).Return(entity.Member{}, false).AnyTimes()
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := logger.Nop()
 	l := New(Config{CacheTTL: time.Minute, CollectEvery: time.Minute},
-		log, d.queues, d.slots, d.nodes, d.members)
+		log, d.queues, d.slots, d.nodes, d.members, d.series)
 	return l, d
 }
 
@@ -81,12 +82,13 @@ func TestCollectSumsDistributedQueueAcrossNodes(t *testing.T) {
 		slots:   mocks.NewMockSlotPlacementTableRepo(ctrl),
 		nodes:   mocks.NewMockNodeRepo(ctrl),
 		members: mocks.NewMockMembershipRepo(ctrl),
+		series:  mocks.NewMockTimeseriesRepo(ctrl),
 	}
 	d.members.EXPECT().Members().Return([]entity.Member{
 		{ID: "node-1", Addr: "a:1"}, {ID: "node-2", Addr: "b:2"},
 	}).AnyTimes()
 	l := New(Config{CacheTTL: time.Minute, CollectEvery: time.Minute},
-		slog.New(slog.NewTextHandler(io.Discard, nil)), d.queues, d.slots, d.nodes, d.members)
+		logger.Nop(), d.queues, d.slots, d.nodes, d.members, d.series)
 	d.nodes.EXPECT().StatsAll(gomock.Any(), "a:1").
 		Return("node-1", []entity.NodeStats{{
 			Org: "org1", Name: "q", Ready: [3]int64{1, 2, 3}, InFlight: 4,
@@ -100,7 +102,7 @@ func TestCollectSumsDistributedQueueAcrossNodes(t *testing.T) {
 
 	// Storing each node's slice under the queue key would leave whichever node
 	// answered last, so a distributed queue would report a fraction of itself.
-	got, ok := l.stats.Get(key("org1", "q"))
+	got, ok := readCache[entity.NodeStats](l, statsCacheKey("org1", "q"))
 	if !ok {
 		t.Fatal("nothing was collected")
 	}

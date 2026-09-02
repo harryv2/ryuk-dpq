@@ -24,3 +24,6 @@ func New(level, format string) *slog.Logger {
 	}
 	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }
+
+// Nop is for tests, which should not print.
+func Nop() *slog.Logger { return slog.New(slog.DiscardHandler) }

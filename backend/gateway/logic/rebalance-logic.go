@@ -116,7 +116,7 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 	}
 	defer func() {
 		_ = l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
-		l.cache.Evict(key(cfg.Org, cfg.Name))
+		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	}()
 
 	nextGen := cfg.Generation + 1
@@ -161,7 +161,7 @@ func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from
 	}
 	defer func() {
 		_ = l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
-		l.cache.Evict(key(cfg.Org, cfg.Name))
+		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	}()
 
 	l.log.Info("migrating queue", "org", cfg.Org, "queue", cfg.Name,

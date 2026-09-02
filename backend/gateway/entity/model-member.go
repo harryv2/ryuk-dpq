@@ -10,11 +10,9 @@ type Member struct {
 	Addr string `json:"addr"`
 }
 
-// OwnerFor is rendezvous hashing: the member scoring highest for this key wins.
-// Every gateway computes the same answer from the same member list, so nothing
-// has to be elected or agreed. Adding a machine moves only the keys that machine
-// now wins, about 1/(n+1) of them, where a plain modulo would move nearly
-// everything.
+// OwnerFor is rendezvous hashing: the member scoring highest wins, so every
+// gateway agrees without electing anything, and adding a machine moves about
+// 1/(n+1) of the keys where a modulo would move nearly all of them.
 func OwnerFor(key string, members []Member) (Member, bool) {
 	var best Member
 	var bestScore uint64
@@ -35,13 +33,9 @@ func hash64(s string) uint64 {
 	return h.Sum64()
 }
 
-// mix combines the two hashes and runs the result through a finaliser.
-//
-// Hashing key+id in one pass is not enough: FNV processes bytes in order, so
-// ids that differ only in their last byte -- node-1, node-2, node-3 -- produce
-// correlated scores and one member wins far more keys than its share. The
-// finaliser below (splitmix64) avalanches every input bit across the output,
-// which is what makes the spread even.
+// mix runs the combined hashes through splitmix64. Hashing key+id in one FNV
+// pass is not enough: ids differing only in their last byte score in a
+// correlated way, and one member wins far more keys than its share.
 func mix(a, b uint64) uint64 {
 	x := a ^ (b * 0x9E3779B97F4A7C15)
 	x ^= x >> 30

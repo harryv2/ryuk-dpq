@@ -42,6 +42,12 @@ func (h *Handlers) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 			write("ryuk_queue_dead_lettered_total", "Messages moved to the dead-letter queue", "counter", func() {
 				fmt.Fprintf(&b, "ryuk_queue_dead_lettered_total{%s} %d\n", lbl, q.DeadLettered)
 			})
+			write("ryuk_queue_enqueue_rate", "Messages enqueued per second", "gauge", func() {
+				fmt.Fprintf(&b, "ryuk_queue_enqueue_rate{%s} %f\n", lbl, q.EnqueueRate)
+			})
+			write("ryuk_queue_ack_rate", "Messages acknowledged per second", "gauge", func() {
+				fmt.Fprintf(&b, "ryuk_queue_ack_rate{%s} %f\n", lbl, q.AckRate)
+			})
 			write("ryuk_queue_starvation_escapes_total", "Deliveries that used the reserved share", "counter", func() {
 				fmt.Fprintf(&b, "ryuk_queue_starvation_escapes_total{%s} %d\n", lbl, q.StarvationEscapes)
 			})

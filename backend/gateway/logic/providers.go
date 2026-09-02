@@ -7,6 +7,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/config"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/membershipetcd"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/postgres"
+	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/prometheus"
 	"github.com/harryv2/ryuk-dpq/backend/third_party/logger"
 )
 
@@ -21,6 +22,12 @@ func ProvidePostgresDSN(cfg config.Gateway) postgres.DSN { return postgres.DSN(c
 
 func ProvideEtcdEndpoints(cfg config.Gateway) membershipetcd.Endpoints {
 	return membershipetcd.Endpoints(cfg.Etcd)
+}
+
+// Prometheus is optional. An empty URL yields a repo that reports itself
+// unavailable, and the metrics page falls back to sampling what it can itself.
+func ProvidePrometheusURL(cfg config.Gateway) prometheus.BaseURL {
+	return prometheus.BaseURL(cfg.Prometheus)
 }
 
 func ProvideConfig(cfg config.Gateway) Config {

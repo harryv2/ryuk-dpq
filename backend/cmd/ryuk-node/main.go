@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/config"
 	pb "github.com/harryv2/ryuk-dpq/backend/proto/queue/v1"
@@ -15,8 +16,28 @@ import (
 	"google.golang.org/grpc"
 )
 
+func healthcheck(listen string) int {
+	port := listen
+	if _, p, err := net.SplitHostPort(listen); err == nil {
+		port = p
+	}
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 2*time.Second)
+	if err != nil {
+		return 1
+	}
+	_ = conn.Close()
+	return 0
+}
+
 func main() {
 	cfg := config.LoadNode()
+
+	// The container has no gRPC client, so the binary answers for itself. A node
+	// accepts connections only after recovery, which is the signal we want.
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		os.Exit(healthcheck(cfg.Listen))
+	}
+
 	log := logger.New(cfg.LogLevel, cfg.LogFormat)
 
 	app, err := logic.InitialiseQueueLogic(cfg)

@@ -13,3 +13,7 @@
 node_modules
 
 frontend/out
+
+# demo video: the compressed cut is committed for the README, the rest is not
+docs/demo/ryuk-demo.mp4
+docs/demo/composition/renders/

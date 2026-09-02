@@ -100,9 +100,8 @@ func (q *Queue) Incarnation() uint64 { return q.incarnation }
 // to keep resolving to the same slot.
 func (q *Queue) slotCount() int { return SlotCountFor(q.cfg.Distributed) }
 
-// nextSeq prefixes the counter with the ownership generation so two owners can
-// never hand out overlapping values, and messages merged back from an older
-// owner sort ahead of anything the new owner accepted.
+// nextSeq prefixes the counter with the ownership generation, so two owners
+// never hand out overlapping values and an older owner's messages sort first.
 func (q *Queue) nextSeq() uint64 {
 	return (q.generation << 40) | (q.counter.Add(1) & (1<<40 - 1))
 }
@@ -152,8 +151,8 @@ func (q *Queue) fanout(n int) int {
 
 const msgsPerSlotTarget = 1000
 
-// SlotFor exposes slot selection so a caller that has to decide before the
-// request reaches the owning node gets the same answer.
+// SlotFor lets a caller that must choose before reaching the owning node get
+// the same answer.
 func (q *Queue) SlotFor(groupID string) uint16 { return q.slotFor(groupID) }
 
 func (q *Queue) slotFor(groupID string) uint16 {
@@ -175,9 +174,8 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	if q.frozen.Load() {
 		return nil, ErrFrozen
 	}
-	// A slot outside the range would be created and then never scanned by the
-	// dispatcher, so the message would be written and never delivered. Refuse
-	// it loudly instead.
+	// A slot past the end would be created and never scanned, so the message
+	// would be written and never delivered.
 	if int(slotID) >= q.slotCount() {
 		return nil, ErrBadSlot
 	}
@@ -210,9 +208,8 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 
 	s := q.slot(slotID)
 	s.mu.Lock()
-	// Seq is assigned here, not earlier: the lock is the point that orders two
-	// concurrent producers, so sequence numbers and list position have to be
-	// decided together or a group can end up out of order.
+	// Assigned under the lock: it is what orders two concurrent producers, so
+	// the number and the list position have to be decided together.
 	m.Seq = q.nextSeq()
 	// Written before it is visible. The log append is a buffered write; the
 	// flush happens off the lock.
@@ -392,7 +389,6 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 			}
 			g.msgs.prepend(list)
 			for _, m := range list {
-				s.st.enqueued++
 				s.st.ready[bucketOf(m.Priority)]++
 				s.st.bytes += int64(len(m.Payload))
 			}
@@ -406,6 +402,12 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 		for _, m := range delayed {
 			s.enqueue(m, now)
 		}
+		// A message arriving here is not a new submission: it is the same
+		// message moving between owners, or coming back from the log after a
+		// restart. Counting it again would make a migration look like a burst
+		// of traffic, and a rate over the counter would show a spike that never
+		// happened. s.enqueue counts, so the delayed ones are taken back off.
+		s.st.enqueued -= uint64(len(delayed))
 		s.refreshHint()
 		s.mu.Unlock()
 

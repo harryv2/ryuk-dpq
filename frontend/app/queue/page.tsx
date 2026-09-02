@@ -9,6 +9,8 @@ import { Busy, Empty, StatCard, age } from "@/lib/ui";
 
 type Tab = "send" | "poll";
 
+type Sent = { id: string; payload: string; priority: string; groupId: string; at: number };
+
 function QueueDetailInner() {
   const { org } = useOrg();
   const router = useRouter();
@@ -113,7 +115,7 @@ function SendPanel({
 }) {
   const [f, setF] = useState({ payload: "", priority: "HIGH", groupId: "", count: 1, ttl: "" });
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(0);
+  const [recent, setRecent] = useState<Sent[]>([]);
 
   const set = (k: string, v: unknown) => setF({ ...f, [k]: v });
 
@@ -122,15 +124,24 @@ function SendPanel({
     setBusy(true);
     onError("");
     try {
+      const just: Sent[] = [];
       for (let i = 0; i < f.count; i++) {
-        await api.enqueue(token, queue, {
-          payload: f.count > 1 ? `${f.payload} #${i + 1}` : f.payload,
+        const payload = f.count > 1 ? `${f.payload} #${i + 1}` : f.payload;
+        const res = await api.enqueue(token, queue, {
+          payload,
           priority: f.priority,
           groupId: f.groupId || undefined,
           ttl: f.ttl || undefined,
         });
+        just.push({
+          id: res?.messageId ?? "",
+          payload,
+          priority: f.priority,
+          groupId: f.groupId,
+          at: Date.now(),
+        });
       }
-      setSent(f.count);
+      setRecent((r) => [...just.reverse(), ...r].slice(0, 12));
       setF({ ...f, payload: "" });
       onSent();
     } catch (e: any) {
@@ -141,8 +152,8 @@ function SendPanel({
   };
 
   return (
-    <div className="card" style={{ maxWidth: 640 }}>
-      <form onSubmit={submit}>
+    <div className="split">
+      <form className="card" onSubmit={submit}>
         <label>
           <span>Payload</span>
           <textarea
@@ -152,7 +163,7 @@ function SendPanel({
           />
         </label>
 
-        <div className="grid cols-2">
+        <div className="fields">
           <label>
             <span>Priority</span>
             <select value={f.priority} onChange={(e) => set("priority", e.target.value)}>
@@ -162,7 +173,15 @@ function SendPanel({
             </select>
           </label>
           <label>
-            <span>Copies to send</span>
+            <span>Group</span>
+            <input
+              value={f.groupId}
+              onChange={(e) => set("groupId", e.target.value)}
+              placeholder="user-123"
+            />
+          </label>
+          <label>
+            <span>Copies</span>
             <input
               type="number" min={1} max={100} value={f.count}
               onChange={(e) => set("count", Math.max(1, Number(e.target.value) || 1))}
@@ -170,30 +189,42 @@ function SendPanel({
           </label>
         </div>
 
-        <label>
-          <span>Group</span>
-          <input
-            value={f.groupId}
-            onChange={(e) => set("groupId", e.target.value)}
-            placeholder="user-123"
-          />
-          <p className="field-hint">
-            Messages sharing a group are delivered one at a time, in order. Leave it
-            empty and the queue is free to hand out messages in parallel.
-          </p>
-        </label>
+        <p className="field-hint" style={{ marginTop: -4 }}>
+          Messages sharing a group are delivered one at a time, in order. Leave it
+          empty and the queue is free to hand out messages in parallel. Sending
+          several copies numbers them, so the order they come back in is visible.
+        </p>
 
-        <div className="row">
+        <div className="row" style={{ marginTop: 16 }}>
           <button className="primary" disabled={busy}>
             {busy ? <Busy label="Sending…" /> : `Send${f.count > 1 ? ` ${f.count}` : ""}`}
           </button>
-          {sent > 0 && !busy && (
-            <span className="muted fade-in" key={sent}>
-              {sent} message{sent > 1 ? "s" : ""} queued
-            </span>
-          )}
         </div>
       </form>
+
+      <div className="card flush">
+        <div className="card-head" style={{ padding: "16px 16px 0", marginBottom: 12 }}>
+          <h2>Just sent</h2>
+          {recent.length > 0 && (
+            <button className="ghost sm" onClick={() => setRecent([])}>Clear</button>
+          )}
+        </div>
+        {recent.length === 0 ? (
+          <Empty title="Nothing sent yet">
+            What you queue from here shows up in this list, newest first.
+          </Empty>
+        ) : (
+          <ul className="feed">
+            {recent.map((m) => (
+              <li key={m.id + m.at} className="fade-in">
+                <span className={"tag " + m.priority.toLowerCase()}>{m.priority}</span>
+                <span className="mono body">{m.payload}</span>
+                {m.groupId && <span className="mono muted group">{m.groupId}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -16,8 +16,6 @@ func (l *QueueLogic) Stats(spec entity.QueueSpec) (entity.QueueStats, error) {
 
 // StatsAll answers for every queue on this node in one call, so collecting
 // metrics costs one request per node rather than one per queue.
-// StatsAll answers for every queue on this node in one call, so collecting
-// metrics costs one request per node rather than one per queue.
 func (l *QueueLogic) StatsAll() entity.StatsAllResponse {
 	l.mu.RLock()
 	snapshot := make(map[engine.QueueKey]*liveQueue, len(l.queues))
@@ -58,8 +56,6 @@ func (l *QueueLogic) offerDeadLetter(key engine.QueueKey, m *engine.Message) {
 	}
 }
 
-// DeadLetters drains what the sweeper has moved out of queues so the caller can
-// route it to a dead-letter queue.
 // DeadLetters drains what the sweeper has moved out of queues so the caller can
 // route it to a dead-letter queue.
 func (l *QueueLogic) DeadLetters() []deadLetter {

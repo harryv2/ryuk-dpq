@@ -8,11 +8,11 @@ package logic
 
 import (
 	"context"
-
 	"github.com/harryv2/ryuk-dpq/backend/config"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/membershipetcd"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/nodegrpc"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/postgres"
+	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/prometheus"
 )
 
 // Injectors from container.go:
@@ -36,7 +36,9 @@ func InitialiseGatewayLogic(ctx context.Context, cfg config.Gateway) (*GatewayLo
 		cleanup()
 		return nil, nil, err
 	}
-	gatewayLogic := New(logicConfig, logger, queuesTable, slotPlacementTable, repo, membershipetcdRepo)
+	baseURL := ProvidePrometheusURL(cfg)
+	prometheusRepo := prometheus.New(baseURL, logger)
+	gatewayLogic := New(logicConfig, logger, queuesTable, slotPlacementTable, repo, membershipetcdRepo, prometheusRepo)
 	return gatewayLogic, func() {
 		cleanup2()
 		cleanup()

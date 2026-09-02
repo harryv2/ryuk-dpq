@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+      body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; }
+
+      .scene { position: absolute; inset: 0; }
+      .fill { position: absolute; inset: 0; background: #0b0d13; }
+
+      /* The caption band is reserved, so the app window letterboxes above it and
+         is never covered by text. */
+      .shot { position: absolute; left: 0; right: 0; top: 0; bottom: 112px;
+              display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      .shot img { width: 100%; height: 100%; object-fit: contain; }
+
+      .cap { position: absolute; left: 0; right: 0; bottom: 0; height: 112px;
+             background: #0b0d13; border-top: 1px solid rgba(255,255,255,.09);
+             display: flex; align-items: center; gap: 24px; padding: 0 54px; }
+      .tag { flex: none; font-size: 19px; font-weight: 700; letter-spacing: .14em;
+             color: #9fd0ff; border: 1.5px solid #2f6fd0; border-radius: 999px;
+             padding: 8px 18px; background: rgba(47,111,208,.18); white-space: nowrap; }
+      .q { font-size: 27px; font-weight: 600; color: #f4f5fb; line-height: 1.25; }
+
+      .card, .divider { position: absolute; inset: 0; background: #0b0d13;
+                        display: flex; align-items: center; justify-content: center; }
+      .card .inner { width: 1380px; text-align: left; }
+      .kicker { font-size: 25px; font-weight: 700; letter-spacing: .22em; color: #5b9bff; margin-bottom: 26px; }
+      .h1 { font-size: 92px; font-weight: 800; color: #f5f6fc; line-height: 1.06; letter-spacing: -.015em; }
+      .h2 { font-size: 38px; font-weight: 500; color: #b9bdd4; margin-top: 32px; line-height: 1.4; }
+      .center { text-align: center; }
+      .big { font-size: 108px; }
+      .rows { margin-top: 42px; }
+      .row { display: flex; align-items: baseline; gap: 18px; font-size: 33px; color: #d7daea; padding: 12px 0; }
+      .row .dot { flex: none; width: 12px; height: 12px; border-radius: 999px; background: #2f6fd0; position: relative; top: -4px; }
+      .row b { color: #fff; font-weight: 700; }
+      .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 29px; color: #7fb1ff; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="80.0"
+      data-width="1920"
+      data-height="1080"
+      style="position: relative; width: 1920px; height: 1080px; background: #000"
+    >
+      <audio id="bgm" data-start="0" data-duration="80.0" data-track-index="9" data-volume="0.42" src="assets/bgm.m4a"></audio>
+      <div class="clip scene" id="s01" data-start="0.0" data-duration="6.0" data-track-index="0">
+        <div class="fill"></div>
+        <div class="card">
+          <div class="inner">
+            <div class="kicker" id="s01-k">DISTRIBUTED PRIORITY QUEUE</div>
+            <div class="h1" id="s01-h">Ryuk</div>
+            <div class="h2" id="s01-s">Priority 0&ndash;100, strict ordering within a group, at-least-once delivery.
+              Two queue types: one machine for exact order, or slots spread across the cluster.</div>
+            <div class="rows" id="s01-r">
+              <div class="row"><span class="dot"></span><span>Rendezvous placement &mdash; <b>no coordinator, nothing elected</b></span></div>
+              <div class="row"><span class="dot"></span><span>Write-ahead log per slot; a restarted node replays and rejoins</span></div>
+              <div class="row"><span class="dot"></span><span>Nodes register themselves &mdash; adding one rebalances the work onto it</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s02" data-start="6.0" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s02-k">PART 1</div>
+            <div class="h1 center big" id="s02-h">The queue list</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s03" data-start="7.8" data-duration="2.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s03-i" src="assets/01_queues.png" alt="" /></div>
+        <div class="cap" id="s03-c"><span class="tag">QUEUES</span><span class="q">Depth, in-flight, oldest age, owner and placement type &mdash; per org, at a glance</span></div>
+      </div>
+      <div class="clip scene" id="s04" data-start="10.4" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s04-k">PART 2</div>
+            <div class="h1 center big" id="s04-h">Create, then send four</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s05" data-start="12.2" data-duration="1.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s05-i" src="assets/02_new_named.png" alt="" /></div>
+        <div class="cap" id="s05-c"><span class="tag">NEW QUEUE</span><span class="q">A name, and one placement choice: single node for exact ordering, or spread across the cluster</span></div>
+      </div>
+      <div class="clip scene" id="s06" data-start="13.8" data-duration="1.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s06-i" src="assets/03_created_empty.png" alt="" /></div>
+        <div class="cap" id="s06-c"><span class="tag">EMPTY</span><span class="q">Created and placed on a node. Nothing ready, nothing in flight</span></div>
+      </div>
+      <div class="clip scene" id="s07" data-start="15.4" data-duration="1.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s07-i" src="assets/04_sent_high1.png" alt="" /></div>
+        <div class="cap" id="s07-c"><span class="tag">SEND</span><span class="q">First message in at HIGH &mdash; what was queued appears beside the form</span></div>
+      </div>
+      <div class="clip scene" id="s08" data-start="17.0" data-duration="3.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s08-i" src="assets/05_sent_all_four.png" alt="" /></div>
+        <div class="cap" id="s08-c"><span class="tag">FOUR IN</span><span class="q">Two HIGH, one MEDIUM, one LOW. Ready reads 4; the feed lists them newest first</span></div>
+      </div>
+      <div class="clip scene" id="s09" data-start="20.2" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s09-k">PART 3</div>
+            <div class="h1 center big" id="s09-h">Poll, acknowledge, nack</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s10" data-start="22.0" data-duration="1.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s10-i" src="assets/06_poll_ready.png" alt="" /></div>
+        <div class="cap" id="s10-c"><span class="tag">ONE AT A TIME</span><span class="q">Taking a single message per poll, so the order the queue hands them out is visible</span></div>
+      </div>
+      <div class="clip scene" id="s11" data-start="23.6" data-duration="2.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s11-i" src="assets/07_poll_high1.png" alt="" /></div>
+        <div class="cap" id="s11-c"><span class="tag">HIGH FIRST</span><span class="q">Ready 4 &rarr; 3, in flight 1. The first HIGH comes out, attempt 1</span></div>
+      </div>
+      <div class="clip scene" id="s12" data-start="26.4" data-duration="2.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s12-i" src="assets/08_ack_high1.png" alt="" /></div>
+        <div class="cap" id="s12-c"><span class="tag">ACK</span><span class="q">In flight back to 0 and ready stays at 3 &mdash; acknowledged means gone, not returned</span></div>
+      </div>
+      <div class="clip scene" id="s13" data-start="29.0" data-duration="2.4" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s13-i" src="assets/09_poll_high2.png" alt="" /></div>
+        <div class="cap" id="s13-c"><span class="tag">SECOND HIGH</span><span class="q">Ready 3 &rarr; 2. Both HIGH messages come out before anything else</span></div>
+      </div>
+      <div class="clip scene" id="s14" data-start="31.4" data-duration="3.0" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s14-i" src="assets/10_nack_high2.png" alt="" /></div>
+        <div class="cap" id="s14-c"><span class="tag">NACK</span><span class="q">Ready climbs back to 3 &mdash; a nack returns the message to the queue instead of consuming it</span></div>
+      </div>
+      <div class="clip scene" id="s15" data-start="34.4" data-duration="3.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s15-i" src="assets/11_poll_high2_again.png" alt="" /></div>
+        <div class="cap" id="s15-c"><span class="tag">REDELIVERED</span><span class="q">The same message, now attempt 2. Retries are counted, and enough of them send it to the dead-letter queue</span></div>
+      </div>
+      <div class="clip scene" id="s16" data-start="37.6" data-duration="2.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s16-i" src="assets/12_poll_medium.png" alt="" /></div>
+        <div class="cap" id="s16-c"><span class="tag">THEN MEDIUM</span><span class="q">Only once both HIGH messages are done does MEDIUM get its turn</span></div>
+      </div>
+      <div class="clip scene" id="s17" data-start="40.2" data-duration="2.6" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s17-i" src="assets/13_poll_low.png" alt="" /></div>
+        <div class="cap" id="s17-c"><span class="tag">THEN LOW</span><span class="q">LOW last, exactly as submitted &mdash; strict priority, FIFO inside each band</span></div>
+      </div>
+      <div class="clip scene" id="s18" data-start="42.8" data-duration="2.4" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s18-i" src="assets/14_drained.png" alt="" /></div>
+        <div class="cap" id="s18-c"><span class="tag">DRAINED</span><span class="q">Ready 0, in flight 0. Four in, four out, one of them twice because it was nacked</span></div>
+      </div>
+      <div class="clip scene" id="s19" data-start="45.2" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s19-k">PART 4</div>
+            <div class="h1 center big" id="s19-h">Metrics</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s20" data-start="47.0" data-duration="3.0" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s20-i" src="assets/15_metrics_demo.png" alt="" /></div>
+        <div class="cap" id="s20-c"><span class="tag">THROUGHPUT</span><span class="q">Enqueue and acknowledge rates, worked out by the gateway from the change between two collections &mdash; a node reports only totals</span></div>
+      </div>
+      <div class="clip scene" id="s21" data-start="50.0" data-duration="2.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s21-i" src="assets/16_metrics_events.png" alt="" /></div>
+        <div class="cap" id="s21-c"><span class="tag">DEPTH BY PRIORITY</span><span class="q">Stacked bands over a rolling window, summed across every machine holding a slot</span></div>
+      </div>
+      <div class="clip scene" id="s22" data-start="52.2" data-duration="2.4" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s22-i" src="assets/17_metrics_filtered.png" alt="" /></div>
+        <div class="cap" id="s22-c"><span class="tag">FILTER</span><span class="q">Hiding a band rescales the axis, so a small series is not flattened by a large one</span></div>
+      </div>
+      <div class="clip scene" id="s23" data-start="54.6" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s23-k">PART 5</div>
+            <div class="h1 center big" id="s23-h">The cluster</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s24" data-start="56.4" data-duration="3.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s24-i" src="assets/18_cluster.png" alt="" /></div>
+        <div class="cap" id="s24-c"><span class="tag">PLACEMENT</span><span class="q">A distributed queue&rsquo;s slots spread over every node; a single-node queue is placed whole</span></div>
+      </div>
+      <div class="clip scene" id="s25" data-start="59.6" data-duration="3.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s25-i" src="assets/19_cluster_nodes.png" alt="" /></div>
+        <div class="cap" id="s25-c"><span class="tag">STOP ONE</span><span class="q">Each node shows its container id, so a failure can be triggered by hand and watched</span></div>
+      </div>
+      <div class="clip scene" id="s26" data-start="62.8" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="divider">
+          <div>
+            <div class="kicker center" id="s26-k">PART 6</div>
+            <div class="h1 center big" id="s26-h">Tenancy and theme</div>
+          </div>
+        </div>
+      </div>
+      <div class="clip scene" id="s27" data-start="64.6" data-duration="2.4" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s27-i" src="assets/20_globex.png" alt="" /></div>
+        <div class="cap" id="s27-c"><span class="tag">ANOTHER ORG</span><span class="q">The org comes from the credential, never the URL &mdash; Globex sees none of Acme&rsquo;s queues</span></div>
+      </div>
+      <div class="clip scene" id="s28" data-start="67.0" data-duration="1.8" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s28-i" src="assets/21_dark_queues.png" alt="" /></div>
+        <div class="cap" id="s28-c"><span class="tag">DARK</span><span class="q">Light and dark, remembered per browser</span></div>
+      </div>
+      <div class="clip scene" id="s29" data-start="68.8" data-duration="2.2" data-track-index="0">
+        <div class="fill"></div>
+        <div class="shot" data-layout-allow-overflow><img id="s29-i" src="assets/22_dark_cluster.png" alt="" /></div>
+        <div class="cap" id="s29-c"><span class="tag">SAME DATA</span><span class="q">Nothing is redrawn for a theme; the charts and tables read the same palette</span></div>
+      </div>
+      <div class="clip scene" id="s30" data-start="71.0" data-duration="9.0" data-track-index="0">
+        <div class="fill"></div>
+        <div class="card">
+          <div class="inner">
+            <div class="kicker" id="s30-k">UNDER THE HOOD</div>
+            <div class="h1" id="s30-h" style="font-size: 64px">One engine, two placement strategies</div>
+            <div class="rows" id="s30-r">
+              <div class="row"><span class="dot"></span><span><b>Priority bitmap</b> &mdash; highest non-empty band in constant time, whatever the depth</span></div>
+              <div class="row"><span class="dot"></span><span><b>Group locking</b> &mdash; one message per group in flight, so order survives concurrency</span></div>
+              <div class="row"><span class="dot"></span><span><b>Starvation reserve</b> &mdash; low priority still moves while urgent work saturates</span></div>
+              <div class="row"><span class="dot"></span><span><b>Lease epochs</b> &mdash; a late acknowledgment cannot delete someone else's message</span></div>
+              <div class="row"><span class="dot"></span><span><b>Freeze, ship, absorb</b> &mdash; rebalancing without losing a message or its order</span></div>
+              <div class="row"><span class="dot"></span><span class="mono">Go &middot; gRPC &middot; PostgreSQL &middot; etcd &middot; Next.js &middot; Docker</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      
+      tl.fromTo("#s01-k", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.3);
+      tl.fromTo("#s01-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.55);
+      tl.fromTo("#s01-s", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.95);
+      tl.fromTo("#s01-r", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 1.35);
+      tl.fromTo("#s02-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 6.12);
+      tl.fromTo("#s02-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.28);
+      tl.fromTo("#s03-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 7.9);
+      tl.fromTo("#s03-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 7.8);
+      tl.fromTo("#s04-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 10.52);
+      tl.fromTo("#s04-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 10.68);
+      tl.fromTo("#s05-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 12.3);
+      tl.fromTo("#s05-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 12.2);
+      tl.fromTo("#s06-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 13.9);
+      tl.fromTo("#s06-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 13.8);
+      tl.fromTo("#s07-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 15.5);
+      tl.fromTo("#s07-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 15.4);
+      tl.fromTo("#s08-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 17.1);
+      tl.fromTo("#s08-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 17.0);
+      tl.fromTo("#s09-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 20.32);
+      tl.fromTo("#s09-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 20.48);
+      tl.fromTo("#s10-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 22.1);
+      tl.fromTo("#s10-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 22.0);
+      tl.fromTo("#s11-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 23.7);
+      tl.fromTo("#s11-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 23.6);
+      tl.fromTo("#s12-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 26.5);
+      tl.fromTo("#s12-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 26.4);
+      tl.fromTo("#s13-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 29.1);
+      tl.fromTo("#s13-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 29.0);
+      tl.fromTo("#s14-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 31.5);
+      tl.fromTo("#s14-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 31.4);
+      tl.fromTo("#s15-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 34.5);
+      tl.fromTo("#s15-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 34.4);
+      tl.fromTo("#s16-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 37.7);
+      tl.fromTo("#s16-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 37.6);
+      tl.fromTo("#s17-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 40.3);
+      tl.fromTo("#s17-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 40.2);
+      tl.fromTo("#s18-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 42.9);
+      tl.fromTo("#s18-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 42.8);
+      tl.fromTo("#s19-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 45.32);
+      tl.fromTo("#s19-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 45.48);
+      tl.fromTo("#s20-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 47.1);
+      tl.fromTo("#s20-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 47.0);
+      tl.fromTo("#s21-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 50.1);
+      tl.fromTo("#s21-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 50.0);
+      tl.fromTo("#s22-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 52.3);
+      tl.fromTo("#s22-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 52.2);
+      tl.fromTo("#s23-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 54.72);
+      tl.fromTo("#s23-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 54.88);
+      tl.fromTo("#s24-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 56.5);
+      tl.fromTo("#s24-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 56.4);
+      tl.fromTo("#s25-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 59.7);
+      tl.fromTo("#s25-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 59.6);
+      tl.fromTo("#s26-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 62.92);
+      tl.fromTo("#s26-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 63.08);
+      tl.fromTo("#s27-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 64.7);
+      tl.fromTo("#s27-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 64.6);
+      tl.fromTo("#s28-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 67.1);
+      tl.fromTo("#s28-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 67.0);
+      tl.fromTo("#s29-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 68.9);
+      tl.fromTo("#s29-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 68.8);
+      tl.fromTo("#s30-k", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 71.3);
+      tl.fromTo("#s30-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 71.55);
+      tl.fromTo("#s30-r", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 72.0);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

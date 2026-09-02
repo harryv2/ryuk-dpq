@@ -47,13 +47,9 @@ func (q *Queue) reserveTick(n uint64) bool {
 	return n%every == 0
 }
 
-// takeUrgent reads two atomics per slot, then locks only the winner. Sixteen
-// atomic loads cost a few nanoseconds; sixteen mutex acquisitions would not.
-//
-// Comparing headSeq at equal priority is what makes FIFO exact. A normal queue
-// has every slot in this process, so this loop sees all of them. A distributed
-// queue's LocalSlots returns a subset and the comparison cannot span the rest,
-// which is the entire cost of that flag inside the engine.
+// takeUrgent reads two atomics per slot, then locks only the winner. Comparing
+// headSeq at equal priority is what makes FIFO exact -- and why a distributed
+// queue, whose owner sees only a subset of slots, cannot promise it.
 func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
 	for attempt := 0; attempt < maxDispatchRetries; attempt++ {
 		var best *slot

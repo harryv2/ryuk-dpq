@@ -20,8 +20,7 @@ import (
 func main() {
 	cfg := config.LoadGateway()
 
-	// Docker's healthcheck runs inside the container, which has no curl. The
-	// binary is already there, so it answers the question itself.
+	// The container has no curl, so the binary answers for itself.
 	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
 		os.Exit(healthcheck(cfg.Listen))
 	}

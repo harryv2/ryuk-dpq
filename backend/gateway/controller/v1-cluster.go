@@ -12,6 +12,3 @@ func (h *Handlers) Cluster(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
-
-// PrometheusMetrics renders the same numbers the JSON endpoints serve. Written
-// by hand so the service needs no metrics library.

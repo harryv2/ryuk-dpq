@@ -1,0 +1,12 @@
+# Prometheus scrapes the gateway, never a node. The gateway already collects
+# from every node and exposes the result at /metrics, so pointing a scraper at
+# the nodes would duplicate that path and add a second thing to keep in step.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: ryuk-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8080"]

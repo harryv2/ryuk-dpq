@@ -1,62 +1,94 @@
-// Package cache is a small TTL map. Queue configs change rarely, so everything
-// they control tolerates being a little stale.
+// Package inmemorycache is a process-local cache over ristretto. Values are
+// stored as JSON bytes so one cache can hold every kind of value the callers
+// need, each key namespaced by its own prefix.
 package inmemorycache
 
 import (
-	"sync"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/dgraph-io/ristretto"
 )
 
-type entry[V any] struct {
-	val V
-	exp time.Time
+type InMemoryCache struct {
+	client *ristretto.Cache
+	logger *slog.Logger
 }
 
-type TTL[K comparable, V any] struct {
-	mu  sync.RWMutex
-	m   map[K]entry[V]
-	ttl time.Duration
-	now func() time.Time
-}
-
-func New[K comparable, V any](ttl time.Duration) *TTL[K, V] {
-	return &TTL[K, V]{m: make(map[K]entry[V]), ttl: ttl, now: time.Now}
-}
-
-func (c *TTL[K, V]) Get(k K) (V, bool) {
-	c.mu.RLock()
-	e, ok := c.m[k]
-	c.mu.RUnlock()
-	if !ok || c.now().After(e.exp) {
-		var zero V
-		return zero, false
+// NewInMemoryCache builds the cache. Ristretto admits keys by frequency rather
+// than keeping everything, so a Set is allowed to be dropped -- a caller must
+// treat a miss as normal and go to the source, which read-through already does.
+func NewInMemoryCache(logger *slog.Logger) *InMemoryCache {
+	const (
+		numCounters = 1e7     // keys to track the frequency of
+		maxCost     = 1 << 28 // 256 MiB
+	)
+	client, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: numCounters,
+		MaxCost:     maxCost,
+		BufferItems: 64,
+	})
+	if err != nil {
+		panic(err)
 	}
-	return e.val, true
-}
-
-func (c *TTL[K, V]) Put(k K, v V) { c.PutFor(k, v, c.ttl) }
-
-func (c *TTL[K, V]) PutFor(k K, v V, ttl time.Duration) {
-	c.mu.Lock()
-	c.m[k] = entry[V]{val: v, exp: c.now().Add(ttl)}
-	c.mu.Unlock()
-}
-
-func (c *TTL[K, V]) Evict(k K) {
-	c.mu.Lock()
-	delete(c.m, k)
-	c.mu.Unlock()
-}
-
-func (c *TTL[K, V]) Snapshot() map[K]V {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	out := make(map[K]V, len(c.m))
-	now := c.now()
-	for k, e := range c.m {
-		if now.Before(e.exp) {
-			out[k] = e.val
-		}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
 	}
-	return out
+	return &InMemoryCache{client: client, logger: logger}
+}
+
+func (c *InMemoryCache) Set(key string, value []byte, ttl time.Duration) error {
+	if ok := c.client.SetWithTTL(key, value, int64(len(key)+len(value)), ttl); !ok {
+		return fmt.Errorf("inmemorycache: %q was not admitted", key)
+	}
+	// Ristretto applies writes through a buffer, so without this a Get straight
+	// after a Set can miss.
+	c.client.Wait()
+	return nil
+}
+
+func (c *InMemoryCache) Get(key string) ([]byte, bool) {
+	v, ok := c.client.Get(key)
+	if !ok {
+		return nil, false
+	}
+	b, ok := v.([]byte)
+	return b, ok
+}
+
+func (c *InMemoryCache) Has(key string) bool {
+	_, ok := c.client.Get(key)
+	return ok
+}
+
+func (c *InMemoryCache) Del(key string) { c.client.Del(key) }
+
+func (c *InMemoryCache) Close() { c.client.Close() }
+
+// MarshalAndSet stores a value as JSON. A failure to cache is not a failure of
+// the caller's work, so it is logged rather than returned.
+func (c *InMemoryCache) MarshalAndSet(key string, val any, ttl time.Duration) {
+	b, err := json.Marshal(val)
+	if err != nil {
+		c.logger.Error("cache: could not encode value", "key", key, "err", err)
+		return
+	}
+	if err := c.Set(key, b, ttl); err != nil {
+		c.logger.Debug("cache: value not stored", "key", key, "err", err)
+	}
+}
+
+// GetAndParse reads a value into out. It reports whether the key was present;
+// a decode failure is returned so a caller can tell a miss from bad data.
+func (c *InMemoryCache) GetAndParse(key string, out any) (bool, error) {
+	b, ok := c.Get(key)
+	if !ok {
+		return false, nil
+	}
+	if err := json.Unmarshal(b, out); err != nil {
+		return true, err
+	}
+	return true, nil
 }

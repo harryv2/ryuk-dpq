@@ -14,6 +14,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/membershipetcd"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/nodegrpc"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/postgres"
+	"github.com/harryv2/ryuk-dpq/backend/gateway/repo/prometheus"
 )
 
 // InitialiseGatewayLogic builds the god struct and everything under it. Swapping
@@ -24,6 +25,7 @@ func InitialiseGatewayLogic(ctx context.Context, cfg config.Gateway) (*GatewayLo
 		ProvideConfig,
 		ProvidePostgresDSN,
 		ProvideEtcdEndpoints,
+		ProvidePrometheusURL,
 
 		postgres.NewDBWrapper,
 		postgres.NewQueuesTable,
@@ -36,6 +38,9 @@ func InitialiseGatewayLogic(ctx context.Context, cfg config.Gateway) (*GatewayLo
 
 		membershipetcd.New,
 		wire.Bind(new(entity.MembershipRepo), new(*membershipetcd.Repo)),
+
+		prometheus.New,
+		wire.Bind(new(entity.TimeseriesRepo), new(*prometheus.Repo)),
 
 		New,
 	)

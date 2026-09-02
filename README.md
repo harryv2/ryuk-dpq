@@ -14,6 +14,20 @@ tracks each message from submission to completion, and reports metrics.
 [placement and metadata](docs/lld/05-placement-and-metadata.md) ·
 [metrics and testing](docs/lld/06-metrics-and-testing.md)
 
+## Demo
+
+**[docs/demo/ryuk-demo-compressed.mp4](docs/demo/ryuk-demo-compressed.mp4)** (4.8 MB)
+— an 80-second walkthrough against a live four-node cluster: create a queue, send
+two HIGH, one MEDIUM and one LOW, then poll them one at a time through
+acknowledge and nack, watching the ordering and retry counters move.
+
+`docs/demo/ryuk-demo.mp4` is the full-quality render, and the
+[HyperFrames source](docs/demo/composition) rebuilds either one.
+
+> For a player embedded in the page rather than a download link, drag the
+> compressed file into a GitHub issue, pull request or release. GitHub returns a
+> `user-attachments` URL that renders inline; a repository path does not.
+
 ---
 
 ## Running it
@@ -24,12 +38,7 @@ make scale N=6          # add three more; queues rebalance onto them
 make down
 ```
 
-Without Docker:
-
-```bash
-go build ./backend/...
-go test -race ./backend/...
-```
+The UI is at <http://localhost:8090>, served by the gateway.
 
 ## Trying it
 
@@ -48,222 +57,109 @@ curl -X POST localhost:8090/v1/queues/orders/messages/ack -H "$T" \
   -d '{"receipt":"<from the dequeue>"}'
 
 curl localhost:8090/v1/queues/orders/stats -H "$T"
-curl localhost:8090/v1/cluster
-curl localhost:8090/metrics
 ```
-
-Load and invariant check:
-
-```bash
-go run ./backend/tests/harness -producers 8 -consumers 8 -messages 500
-```
-
----
 
 ## Two kinds of queue
-
-The only placement decision a caller makes, and it defaults to off.
 
 |  | `distributed: false` (default) | `distributed: true` |
 |---|---|---|
 | Where it lives | One node, all 16 slots | Up to 64 nodes, a slot each |
-| Priority ordering | **Exact** | Approximate across machines |
-| FIFO within a priority | **Exact** | Approximate across slots |
-| Message counts | **Exact**, one request | Sum across machines |
-| Ceiling | One machine | Up to 64 machines |
-| If its node dies | Whole queue unavailable | Only its slots; the rest keep serving |
+| Priority and FIFO | **Exact** | Approximate across machines |
+| Message counts | **Exact**, one request | Summed across machines |
+| If its node dies | Whole queue waits for it | Only its slots; the rest keep serving |
 
-Ordering **within a group** is strict in both cases, because a group never spans
-slots. That is the guarantee to reach for: two messages that must be ordered
-relative to each other should share a group key.
+Ordering **within a group** is strict either way, because a group never spans
+slots. Two messages that must be ordered should share a group key.
 
-A single machine handles a few hundred thousand messages a second. Reach for
-`distributed` when one queue genuinely outgrows that, and accept that priority
-and FIFO become approximate for it.
+## Where state lives
 
-## Key decisions
+Postgres holds what a queue is and where it sits. etcd holds who is alive.
+Messages live in node memory, backed by a write-ahead log on that node's disk.
 
-**Priority is an integer 0–100**, with HIGH/MEDIUM/LOW as named points (75/50/25).
-Supporting finer priorities later is a config change rather than a rewrite.
+### Postgres
 
-**Ordering comes from groups, not from the queue.** This is SQS FIFO's model, not
-Kafka's. Kafka pins a consumer to a partition, so a consumer on partition 3 cannot
-see an urgent message on partition 5 — which would break the main thing we promise.
-Ryuk locks a group when it hands out a message and unlocks it on acknowledgment,
-so no worker is tied to anything.
+```sql
+CREATE TABLE queues (
+    org_id      TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    settings    JSONB       NOT NULL,   -- visibility timeout, retries, ttl,
+                                        -- starvation threshold and reserve,
+                                        -- max depth, dead-letter queue
+    distributed BOOLEAN     NOT NULL DEFAULT false,
+    state       TEXT        NOT NULL DEFAULT 'active',  -- active | migrating | deleting
+    owner_node  TEXT,                   -- set for a normal queue only
+    generation  BIGINT      NOT NULL DEFAULT 1,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, name)
+);
 
-**Acknowledge takes a receipt, not a bare message ID.** Two reasons, and the
-second matters even on one machine: an ID cannot be routed without a cluster-wide
-index, and it cannot tell two deliveries apart. If a worker stalls past its lease
-and the message goes to somebody else, a late acknowledgment from the first worker
-would delete a message the second is still processing. The receipt carries a lease
-generation that makes that detectable.
+CREATE TABLE slot_placement (
+    org_id     TEXT     NOT NULL,
+    queue_name TEXT     NOT NULL,
+    slot       SMALLINT NOT NULL,
+    owner_node TEXT     NOT NULL,
+    generation BIGINT   NOT NULL DEFAULT 1,
+    PRIMARY KEY (org_id, queue_name, slot)
+);
 
-**Low priority cannot starve.** A fixed share of deliveries is reserved for work
-that has waited past a threshold. The gate means it costs nothing when nothing is
-stuck, and the cap means a large old backlog cannot flip the problem around and
-starve urgent work instead. Queue creation rejects a threshold at or above the
-expiry, because that combination silently deletes low-priority work.
-
-**One lock per slot.** Handing out a message changes five structures at once and
-they have to move together. A normal queue has sixteen slots and therefore sixteen
-independent locks; a distributed queue has sixty-four, which is also the ceiling on
-how many machines it can use.
-
-**Placement is a pure function, so nothing is elected.** Rendezvous hashing over
-the live member list: every gateway computes the same owner from the same list.
-Adding a machine moves only the keys that machine now wins.
-
-**Placement is also stored, and the stored value wins.** The hash says where a
-queue *should* go; Postgres says where it *is*. When a node dies the hash
-immediately names someone else, but the data is only on the dead node, so
-ownership has to follow the data. Nothing is reassigned automatically.
-
-**The gateway collects metrics; nothing scrapes a node.** One request per node
-per interval returns every queue that node holds. Nodes have no public listener,
-and a single aggregation path means the dashboard and the stats endpoint cannot
-disagree.
-
-## What is guaranteed
-
-**At-least-once delivery.** A message is delivered until acknowledged. It can
-arrive more than once — a worker that processes but does not acknowledge in time,
-or a node that restarts while the message is out. **Workers must be idempotent.**
-
-**Durability: the write-ahead log.** A message is written and flushed before it
-becomes visible, so a worker can only be handed something already on disk.
-
-| Failure | Survives |
-|---|---|
-| Process panics, killed, redeployed | Yes, completely |
-| Machine reboots | Yes |
-| Disk fills | Yes — submissions rejected, nothing lost |
-| Log torn at the end | Yes — truncated at the checksum |
-| **Machine destroyed** | **No** |
-
-The last row is the honest limit, and replication is what fixes it. It is designed
-and not built: the log is already the replication stream, so shipping records to
-followers and waiting for a quorum is an addition rather than a redesign — but a
-partly-working replication protocol is worse than none.
-
-There is a cheaper production answer too: put the log on storage that outlives the
-machine. Cloud persistent disks detach from a dead instance and attach to a new
-one, which turns permanent machine loss into a slow restart with no consensus
-protocol.
-
-## Node failure
-
-```
-node-2 dies holding a normal queue and 4 slots of a distributed one
-
-  normal queue        → 100% unavailable until it returns
-  distributed queue   → 4 of 64 slots unavailable, 12 keep serving
-  data                → safe in node-2's log
-  reassignment        → none; its data is only there
+CREATE INDEX queues_owner_idx ON queues (owner_node);
 ```
 
-When it comes back it replays its logs, bumps its incarnation, and either resumes
-its queues or ships them to whoever owns them now — the same transfer used for
-rebalancing.
+Two tables because there are two placement units. A normal queue is placed whole,
+so its owner is one column on its row. A distributed queue is placed per slot, so
+it gets sixty-four rows.
 
-A receipt issued before the crash is rejected on the incarnation, because lease
-generations restart from zero after a replay and would otherwise let an
-acknowledgment for a long-dead delivery delete somebody else's message.
+`generation` rises on every ownership change and prefixes the sequence numbers a
+node hands out, so two owners can never issue overlapping ones.
 
-## Scaling
+### etcd
 
-`make scale N=6` starts three more nodes. Each takes one setting — the etcd
-address — and registers itself under a lease. Every node then works out on its own
-which of its queues no longer hash to it and hands them over, because the
-placement function is pure and the member list is the same everywhere.
+Membership only. One key per node, held by a lease, so a node that stops
+refreshing disappears on its own.
 
-Guards against thrashing: membership must be stable for a window before anything
-moves, migrations are rate-limited, and a just-received queue is pinned briefly.
+```
+/ryuk/members/<node-id>  →  {"id":"node-8b5f01fadac2","addr":"172.30.0.4:9090"}
+```
+
+The lease TTL is 10s (`RYUK_LEASE_TTL`). Gateways watch the prefix, so a node
+joining or leaving reaches every gateway without anyone polling.
+
+Placement is **not** in etcd. Without replication a queue's data exists in one
+place, so ownership has to follow the data rather than the hash — which means it
+has to be written down, and Postgres is where the queue already lives.
 
 ## Testing
 
 ```bash
-go test -race ./backend/...
+make test           # unit tests
+make test-race      # the same under the race detector
+make integration    # the real stack in Docker, driven through the REST API
 ```
 
-36 tests across three packages.
-
-**The engine is tested with a clock the test controls.** Visibility timeouts,
-expiry, delayed release and starvation are driven by advancing a fake clock, not
-by sleeping — sleeping is slow, flaky, and cannot test a twelve-hour timeout.
-
-**Concurrency is tested with the race detector**, not by hoping a stress test
-trips something. Eight producers and eight consumers move four thousand messages
-and then the run asserts: everything reached one end state, nothing acknowledged
-twice, nothing delivered to two workers at once, group order preserved, and the
-queue drained.
-
-That group-order assertion found a real bug: sequence numbers were assigned before
-the slot lock, so two concurrent producers could take 100 and 101 and then insert
-in the opposite order. The fix makes the lock the point that orders both.
-
-**Crash recovery is tested for real**: write, `SIGKILL`, restart, and check that
-acknowledged messages stay gone while unacknowledged ones come back with their
-attempt counts.
-
-**The WAL is tested against a torn tail** — appending garbage to the file and
-checking that replay stops at the checksum and the next append still works.
-
-## The UI
-
-`make up` serves it at [localhost:8090](http://localhost:8090) alongside the API.
-Queues with depth and owner, a create form exposing every setting, send and poll
-with ack and nack, priority-stacked charts, and a cluster page showing which node
-holds what. The org dropdown in the header switches credentials.
+The integration suite is Gherkin scenarios run by godog — see
+[`integration/`](integration/README.md).
 
 ## Layout
 
 ```
 backend/
-  queue/                  the node
-    logic/engine/         the queue engine — no imports outside the stdlib
-    logic/                manager, recovery, sweepers, transfer
-    repo/walfile/         write-ahead log, node identity
-    controller/           internal HTTP API
-  gateway/
-    entity/               models, placement hashing, repo interfaces
-    logic/                routing, operations, collector, rebalancer
-    repo/                 postgres, node gRPC client, etcd
-    controller/           public HTTP API
-  proto/                  the gateway-to-node contract
-  third_party/            logger, cache
-  cmd/                    ryuk-node, ryuk-gateway
-  tests/harness/          producer and consumer load check
+  queue/        the node: engine, gRPC server, write-ahead log
+    logic/engine/   priority, groups, leases, starvation reserve
+  gateway/      REST, routing, placement, rebalancing, metric collection
+  cmd/          two binaries
+frontend/       Next.js UI, static export, served by the gateway
+integration/    BDD scenarios against a real Docker cluster
+deploy/         compose file and one Dockerfile per service
+docs/           design
 ```
 
-`make lint-layers` checks the rules that matter: the engine imports nothing from
-the module, controllers never reach into repos, entity never imports the layers
-above it, and the two services never import each other.
+Each service is `controller → logic → entity ← repo`. The engine imports nothing
+outside the standard library; `make lint-layers` checks that and the other layer
+rules.
 
-`engine` imports nothing outside the standard library, which is what lets the
-concurrency tests run the real code path at full speed with no transport, no disk
-and no real clock.
+## What is not built
 
-## Deviations from the design docs
-
-**No coordinator election.** The HLD describes an elected coordinator writing a
-placement map. Rendezvous hashing removed the need — placement is a pure function
-of the member list, so every gateway computes the same answer and nothing has to
-be agreed. The election comes back for load-aware placement, where the choice is
-no longer a pure function.
-
-**Rebalancing runs on the gateway, not the node.** Ownership records live in
-Postgres, which only the gateway talks to. Both compute the same target, so the
-outcome is identical.
-
-## With more time
-
-In rough order of value:
-
-1. **Replication** — the one thing between this and surviving a lost machine.
-2. **Failing over to a new owner** instead of returning 503 while the owning node
-   is down. Worth doing once replication exists: without the data, a new owner
-   breaks group ordering across the failure window, so today the queue blocks.
-3. **Automatic promotion to `distributed`** when a queue saturates its machine.
-4. **Two-pass migration** so a handoff never freezes enqueues at all.
-5. **Per-org quotas and cells** — per-queue depth limits cover most of it today.
+Replication, and with it failing over to a new owner rather than waiting for the
+one that holds the data. Cells, cluster-wide quotas, load-aware placement, and
+automatic promotion of a busy queue to `distributed`.

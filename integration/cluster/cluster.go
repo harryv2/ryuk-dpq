@@ -139,10 +139,29 @@ func (c *Cluster) StopNode(ctx context.Context, index int) (string, error) {
 	return name, nil
 }
 
+// StartContainer brings a stopped container back and waits for its healthcheck
+// to pass. Returning as soon as docker start does would hand the next scenario
+// a node that is registered but not yet accepting connections.
 func (c *Cluster) StartContainer(ctx context.Context, name string) error {
 	start := exec.CommandContext(ctx, "docker", "start", name)
 	start.Stderr = os.Stderr
-	return start.Run()
+	if err := start.Run(); err != nil {
+		return err
+	}
+	return c.waitHealthy(ctx, name, 60*time.Second)
+}
+
+func (c *Cluster) waitHealthy(ctx context.Context, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, err := exec.CommandContext(ctx, "docker", "inspect",
+			"-f", "{{.State.Health.Status}}", name).Output()
+		if err == nil && strings.TrimSpace(string(out)) == "healthy" {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("%s did not become healthy within %s", name, timeout)
 }
 
 func (c *Cluster) nodeContainer(ctx context.Context, index int) (string, error) {

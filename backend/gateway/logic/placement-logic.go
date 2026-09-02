@@ -25,9 +25,6 @@ func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool)
 // ownerAddr resolves where a queue actually is. The stored owner wins over the
 // hash: without replication the data exists in one place, so ownership has to
 // follow it rather than follow the current member list.
-// ownerAddr resolves where a queue actually is. The stored owner wins over the
-// hash: without replication the data exists in one place, so ownership has to
-// follow it rather than follow the current member list.
 func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, slot int) (string, string, error) {
 	stored := cfg.OwnerNode
 	if cfg.Distributed {
@@ -56,6 +53,6 @@ func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, sl
 	if err != nil {
 		return "", "", enterr.Internal("record owner", err)
 	}
-	l.cache.Evict(key(cfg.Org, cfg.Name))
+	l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	return m.ID, m.Addr, nil
 }

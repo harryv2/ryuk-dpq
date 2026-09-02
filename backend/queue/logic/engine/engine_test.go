@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -338,5 +339,56 @@ func TestOldestAge(t *testing.T) {
 	clk.Advance(42 * time.Second)
 	if got := q.Stats().OldestAge; got != 42*time.Second {
 		t.Fatalf("oldest age = %v, want 42s", got)
+	}
+}
+
+// A migration or a replay moves messages that were already submitted. Counting
+// them as new enqueues on the receiving owner makes the handoff look like a
+// burst of traffic, and any rate derived from the counter shows a spike that
+// never happened.
+func TestAbsorbDoesNotCountAsNewEnqueues(t *testing.T) {
+	from, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	for i := 0; i < 6; i++ {
+		enq(t, from, Priority(i*15), fmt.Sprintf("g%d", i%3))
+	}
+	if _, err := from.Enqueue(EnqueueOptions{
+		Payload: []byte("x"), Priority: High, GroupID: "later", DeliverAfter: time.Minute,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if s := from.Stats(); s.Enqueued != 7 {
+		t.Fatalf("the submitting owner counted %d enqueues, want 7", s.Enqueued)
+	}
+
+	// What a handoff actually looks like: one owner freezes, another absorbs.
+	held := from.Freeze()
+	to, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	if err := to.Absorb(held); err != nil {
+		t.Fatal(err)
+	}
+
+	got := to.Stats()
+	if got.Enqueued != 0 {
+		t.Fatalf("the receiving owner counted %d enqueues; a handed-over message "+
+			"was never submitted to it", got.Enqueued)
+	}
+	if got.ReadyTotal() != 6 || got.Delayed != 1 {
+		t.Fatalf("messages lost or duplicated in the handoff: %+v", got)
+	}
+
+	// And it still serves them.
+	drained := 0
+	for {
+		_, r, ok := to.Dequeue()
+		if !ok {
+			break
+		}
+		if err := to.Ack(r); err != nil {
+			t.Fatal(err)
+		}
+		drained++
+	}
+	if drained != 6 {
+		t.Fatalf("drained %d of the 6 ready messages", drained)
 	}
 }

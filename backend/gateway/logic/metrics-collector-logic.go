@@ -8,14 +8,11 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
-// Collect asks each node once for every queue it holds. One request per node
-// per interval, whatever the queue count, and both the stats endpoint and the
-// metrics endpoint read the same cache so they cannot disagree.
+// Collect asks each node once for every queue it holds: one request per node
+// per interval, whatever the queue count.
 func (l *GatewayLogic) Collect(ctx context.Context) {
-	// Totals are accumulated across nodes before being stored. A distributed
-	// queue has a slice of itself on each machine, and writing each slice under
-	// the queue's own key would leave whichever node answered last, so the
-	// queue list would report a fraction of its depth.
+	// Summed before storing. Writing each node's slice under the queue's own key
+	// would leave whichever answered last, so the list would show a fraction.
 	totals := map[string]entity.NodeStats{}
 
 	for _, m := range l.members.Members() {
@@ -26,16 +23,59 @@ func (l *GatewayLogic) Collect(ctx context.Context) {
 		}
 		for _, s := range all {
 			k := key(s.Org, s.Name)
-			l.stats.Put(k+"@"+nodeID, s)
-			l.owner.Put(k, nodeID)
+			writeCache(l, nodeStatsCacheKey(s.Org, s.Name, nodeID), l.statsTTL(), s)
+			writeCache(l, ownerCacheKey(s.Org, s.Name), l.statsTTL(), nodeID)
 			totals[k] = addStats(totals[k], s)
 		}
 	}
 
 	for k, s := range totals {
-		l.stats.Put(k, s)
+		writeCache(l, prefixStats+k, l.statsTTL(), s)
+		l.recordRates(s)
 	}
 }
+
+// QueueRates is throughput per second, worked out from the change in the
+// lifetime counters between two collections.
+type QueueRates struct {
+	Enqueue float64 `json:"enqueue"`
+	Ack     float64 `json:"ack"`
+}
+
+// rateSample is the pair of counters a rate was last derived from.
+type rateSample struct {
+	Enqueued uint64    `json:"enqueued"`
+	Acked    uint64    `json:"acked"`
+	At       time.Time `json:"at"`
+}
+
+func (l *GatewayLogic) recordRates(s entity.NodeStats) {
+	now := time.Now()
+	next := rateSample{Enqueued: s.Enqueued, Acked: s.Acked, At: now}
+
+	if prev, ok := readCache[rateSample](l, sampleCacheKey(s.Org, s.Name)); ok {
+		if elapsed := now.Sub(prev.At).Seconds(); elapsed > 0 {
+			writeCache(l, ratesCacheKey(s.Org, s.Name), l.statsTTL(), QueueRates{
+				Enqueue: perSecond(prev.Enqueued, s.Enqueued, elapsed),
+				Ack:     perSecond(prev.Acked, s.Acked, elapsed),
+			})
+		}
+	}
+	writeCache(l, sampleCacheKey(s.Org, s.Name), l.statsTTL(), next)
+}
+
+// perSecond ignores a counter that went backwards. Counters live in node memory,
+// so a restarted node starts again from zero and the delta is meaningless.
+func perSecond(before, after uint64, elapsed float64) float64 {
+	if after < before {
+		return 0
+	}
+	return float64(after-before) / elapsed
+}
+
+// statsTTL outlives a few collection rounds, so one slow round does not empty
+// the queue list.
+func (l *GatewayLogic) statsTTL() time.Duration { return 3 * l.cfg.CollectEvery }
 
 // addStats sums one node's view into the running total. Ages are a maximum
 // rather than a sum: the oldest message is one message, not the total wait.
@@ -85,13 +125,13 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 		_, addr, err := l.ownerAddr(ctx, cfg, 0)
 		if err == nil && addr != "" {
 			if s, err := l.nodes.Stats(ctx, addr, cfg.Spec()); err == nil {
-				return toStatsResponse(cfg, s, true), nil
+				return l.withRates(toStatsResponse(cfg, s, true), org, name), nil
 			}
 		}
-		if s, ok := l.stats.Get(key(org, name)); ok {
-			return toStatsResponse(cfg, s, false), nil
+		if s, ok := readCache[entity.NodeStats](l, statsCacheKey(org, name)); ok {
+			return l.withRates(toStatsResponse(cfg, s, false), org, name), nil
 		}
-		return toStatsResponse(cfg, entity.NodeStats{Org: org, Name: name}, false), nil
+		return l.withRates(toStatsResponse(cfg, entity.NodeStats{Org: org, Name: name}, false), org, name), nil
 	}
 
 	// A distributed queue is spread, so ask every machine holding a slot and add
@@ -104,18 +144,15 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	for owner, held := range slotsByOwner(cfg) {
 		m, live := l.members.Lookup(owner)
 		if !live {
-			// Its data is only there, so nothing can answer for those slots.
-			// Skipping them silently is what makes a depth of zero look real
-			// while the messages are still sitting on a machine that is down.
+			// Its data is only there. Skipping silently is what makes a depth of
+			// zero look real while the messages sit on a machine that is down.
 			missing += held
 			continue
 		}
 		s, err := l.nodes.Stats(ctx, m.Addr, cfg.Spec())
 		if err != nil {
-			// A node that owns slots but has not been sent a message for them
-			// yet has no queue in memory and says so. That is zero, not
-			// unreachable -- counting it as unavailable makes a healthy cluster
-			// look broken.
+			// It owns slots but has never been sent a message for them, so it has
+			// no queue in memory. That is zero, not unreachable.
 			if enterr.CodeOf(err) == enterr.CodeNotFound {
 				continue
 			}
@@ -125,7 +162,7 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 		total = addStats(total, s)
 	}
 
-	resp := toStatsResponse(cfg, total, false)
+	resp := l.withRates(toStatsResponse(cfg, total, false), org, name)
 	resp.UnavailableSlots = missing
 	return resp, nil
 }
@@ -149,8 +186,8 @@ func (l *GatewayLogic) Metrics(ctx context.Context, org string) ([]entity.QueueS
 	}
 	out := make([]entity.QueueStatsResponse, 0, len(cfgs))
 	for _, c := range cfgs {
-		s, _ := l.stats.Get(key(c.Org, c.Name))
-		out = append(out, toStatsResponse(c, s, !c.Distributed))
+		s, _ := readCache[entity.NodeStats](l, statsCacheKey(c.Org, c.Name))
+		out = append(out, l.withRates(toStatsResponse(c, s, !c.Distributed), c.Org, c.Name))
 	}
 	return out, nil
 }
@@ -210,6 +247,15 @@ func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, err
 		out.Nodes = append(out.Nodes, node)
 	}
 	return out, nil
+}
+
+// withRates fills in throughput, which the collector works out rather than the
+// node: a node reports totals, and a rate needs two readings.
+func (l *GatewayLogic) withRates(resp entity.QueueStatsResponse, org, name string) entity.QueueStatsResponse {
+	if r, ok := readCache[QueueRates](l, ratesCacheKey(org, name)); ok {
+		resp.EnqueueRate, resp.AckRate = r.Enqueue, r.Ack
+	}
+	return resp
 }
 
 func toStatsResponse(cfg entity.QueueConfig, s entity.NodeStats, exact bool) entity.QueueStatsResponse {

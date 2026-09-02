@@ -6,21 +6,16 @@ import (
 	"sync"
 )
 
-// A normal queue's slots are only lock stripes; a distributed queue's count is
-// also the ceiling on how many machines it can use, so it is larger.
-//
-// These must match constants.SlotsPerQueue and SlotsPerDistributedQueue. The
-// engine imports nothing outside the standard library, so the two cannot share a
-// declaration; a test in queue/logic asserts they agree. If they drift, the
-// gateway routes a message to a slot the dispatcher never looks at and it
-// becomes invisible.
+// Must match constants.SlotsPerQueue and SlotsPerDistributedQueue. The engine
+// imports nothing outside the standard library, so a test in queue/logic asserts
+// it instead. If they drift, a message lands in a slot nothing scans.
 const (
 	SlotsPerQueue    = 16
 	MaxSlotsPerQueue = 64
 )
 
-// SlotCountFor is the shape of one queue. It never changes for a given queue,
-// because a group key has to keep resolving to the same slot.
+// SlotCountFor never changes for a given queue: a group key has to keep
+// resolving to the same slot.
 func SlotCountFor(distributed bool) int {
 	if distributed {
 		return MaxSlotsPerQueue
@@ -29,9 +24,7 @@ func SlotCountFor(distributed bool) int {
 }
 
 // Cluster tells the engine how a queue is laid out. LocalSlots is where the
-// distributed flag lands: a normal queue's owner holds all 16, a distributed
-// queue's owner holds only some, and the dispatcher can only compare what it
-// is given.
+// distributed flag lands: the dispatcher can only compare what it is given.
 type Cluster interface {
 	SlotFor(q QueueKey, groupID string, slots int) uint16
 	LocalSlots(q QueueKey, slots int) []uint16

@@ -57,9 +57,34 @@ services:
       RYUK_LOG_FORMAT: json
     volumes:
       - ${RYUK_DATA:-../data}:/data
+    healthcheck:
+      test: ["CMD", "ryuk-node", "-healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 45
     depends_on:
       etcd:
         condition: service_healthy
+
+  # Stores the history behind the metrics charts. Without it the charts still
+  # work, but only over what a browser has sampled since the page was opened.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${RYUK_DATA:-../data}/prometheus:/prometheus
+    ports:
+      - "${RYUK_PROM_PORT:-9091}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
   gateway:
     build:
@@ -73,6 +98,7 @@ services:
       RYUK_ETCD: etcd:2379
       RYUK_STATIC_DIR: /srv/ui
       RYUK_LOG_FORMAT: json
+      RYUK_PROMETHEUS: http://prometheus:9090
     healthcheck:
       test: ["CMD", "ryuk-gateway", "-healthcheck"]
       interval: 2s

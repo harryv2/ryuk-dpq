@@ -16,8 +16,6 @@ func (s *Server) Stats(ctx context.Context, req *pb.StatsRequest) (*pb.QueueStat
 
 // StatsAll answers for every queue on this node in one call, so collecting
 // metrics costs one request per node rather than one per queue.
-// StatsAll answers for every queue on this node in one call, so collecting
-// metrics costs one request per node rather than one per queue.
 func (s *Server) StatsAll(ctx context.Context, _ *pb.Empty) (*pb.StatsAllResponse, error) {
 	out := s.app.StatsAll()
 	resp := &pb.StatsAllResponse{NodeId: out.NodeID}

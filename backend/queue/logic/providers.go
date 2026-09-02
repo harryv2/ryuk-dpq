@@ -1,14 +1,13 @@
 package logic
 
 import (
-	"log/slog"
-
 	"github.com/harryv2/ryuk-dpq/backend/config"
 	"github.com/harryv2/ryuk-dpq/backend/queue/entity"
 	"github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
 	"github.com/harryv2/ryuk-dpq/backend/queue/repo/membershipetcd"
 	"github.com/harryv2/ryuk-dpq/backend/queue/repo/walfile"
 	"github.com/harryv2/ryuk-dpq/backend/third_party/logger"
+	"log/slog"
 )
 
 // DataDir, NodeID and Incarnation are named types so the wire graph can tell
