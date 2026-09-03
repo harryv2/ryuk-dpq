@@ -168,7 +168,7 @@ Membership only. One key per node, held by a lease, so a node that stops
 refreshing disappears on its own.
 
 ```
-/ryuk/membershipRepo/<node-id>  →  {"id":"node-8b5f01fadac2","addr":"172.30.0.4:9090"}
+/ryuk/members/<node-id>  →  {"id":"node-8b5f01fadac2","addr":"172.30.0.4:9090"}
 ```
 
 The lease TTL is 10s (`RYUK_LEASE_TTL`). Gateways watch the prefix, so a node

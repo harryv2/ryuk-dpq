@@ -478,7 +478,7 @@ Section 7 explains why placement is stored at all rather than computed.
 ### etcd — membership only
 
 ```
-/ryuk/membershipRepo/{nodeID}  →  {"addr": "node-3:9090"}     lease TTL 10s, kept alive
+/ryuk/members/{nodeID}  →  {"addr": "node-3:9090"}     lease TTL 10s, kept alive
 ```
 
 Stop renewing — crash, kill, scale down — and the key disappears. Gateways and nodes
@@ -1029,7 +1029,7 @@ arrives next.
 
 ```
 1. The container starts with one setting: the etcd address
-2. It writes /ryuk/membershipRepo/{hostname} with a 10s lease and keeps it alive
+2. It writes /ryuk/members/{hostname} with a 10s lease and keeps it alive
 3. Every gateway and node sees the member list change within milliseconds
 4. Nothing happens for 15 seconds        ← the stability window
 ```

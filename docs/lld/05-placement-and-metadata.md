@@ -23,7 +23,7 @@ alive. **Postgres** holds queue settings and where each queue actually is.
 ## 1. Membership in etcd
 
 ```
-/ryuk/membershipRepo/{nodeID}  →  {"id":"node-abc","addr":"1c0d5eb6:9090"}   lease TTL 10s
+/ryuk/members/{nodeID}  →  {"id":"node-abc","addr":"1c0d5eb6:9090"}   lease TTL 10s
 ```
 
 ```go
