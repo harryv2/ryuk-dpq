@@ -20,7 +20,9 @@ tracks each message from submission to completion, and reports metrics.
 
 ## Demo
 
-https://github.com/user-attachments/assets/adb64610-61bf-4f6d-a1fc-3acc24502eed
+
+https://github.com/user-attachments/assets/5af0e973-5d02-45a1-8b79-99fc9bf88ad4
+
 
 ---
 
