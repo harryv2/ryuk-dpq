@@ -19,7 +19,9 @@ tracks each message from submission to completion, and reports metrics.
 ## Demo
 
 
-https://github.com/user-attachments/assets/56e27257-cc04-4d23-9bc4-b0747777d76a
+https://github.com/user-attachments/assets/857ac63f-e85e-4b3f-a016-903aec645cae
+
+
 
 A 3m 10s walkthrough against a live cluster:
 
