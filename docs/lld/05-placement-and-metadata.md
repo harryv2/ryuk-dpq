@@ -23,7 +23,7 @@ alive. **Postgres** holds queue settings and where each queue actually is.
 ## 1. Membership in etcd
 
 ```
-/ryuk/members/{nodeID}  →  {"id":"node-abc","addr":"1c0d5eb6:9090"}   lease TTL 10s
+/ryuk/membershipRepo/{nodeID}  →  {"id":"node-abc","addr":"1c0d5eb6:9090"}   lease TTL 10s
 ```
 
 ```go
@@ -66,9 +66,9 @@ same set get the same answer regardless of map iteration order.
 ## 2. Placement is a pure function
 
 ```go
-func OwnerFor(key string, members []Member) (Member, bool) {
+func OwnerFor(key string, membershipRepo []Member) (Member, bool) {
     kh := hash64(key)
-    for _, m := range members {
+    for _, m := range membershipRepo {
         if s := mix(kh, hash64(m.ID)); !found || s > bestScore {
             best, bestScore, found = m, s, true
         }
@@ -80,7 +80,7 @@ func OwnerFor(key string, members []Member) (Member, bool) {
 **The mixing step is not decoration.** Hashing `key + id` in one FNV pass looks
 fine and is badly broken: FNV processes bytes in order, so ids differing only in
 their last byte — `node-1`, `node-2`, `node-3` — produce correlated scores and one
-member wins far more than its share. A test that placed 200 keys over 5 members
+member wins far more than its share. A test that placed 200 keys over 5 membershipRepo
 caught it: one member took 99 of them.
 
 Running the combination through a splitmix64 finaliser avalanches every input bit
@@ -254,7 +254,7 @@ pure function:
 | Test | What it pins down |
 |---|---|
 | `TestOwnerIsStableForTheSameMemberList` | The same list always gives the same owner |
-| `TestOwnerSpreadsAcrossMembers` | 200 keys over 5 members land in a band, not on one |
+| `TestOwnerSpreadsAcrossMembers` | 200 keys over 5 membershipRepo land in a band, not on one |
 | `TestAddingAMemberMovesFewKeys` | Adding one of six moves under 30%, not most |
 | `TestRemovingAMemberOnlyMovesItsKeys` | A member leaving never disturbs another's keys |
 | `TestOwnerKeyDistinguishesSlots` | A normal queue places whole, a distributed one per slot |

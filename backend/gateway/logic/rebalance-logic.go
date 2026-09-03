@@ -12,7 +12,7 @@ const (
 	maxConcurrent   = 2
 )
 
-// RunRebalancer moves queues onto machines that join. Placement is a pure
+// RunRebalancer moves queueTableRepo onto machines that join. Placement is a pure
 // function of the member list, so working out what should move needs no
 // coordination; the only thing that needs care is not doing it twice.
 func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
@@ -24,7 +24,7 @@ func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-l.members.Changed():
+		case <-l.membershipRepo.Changed():
 			// A container in a crash loop would otherwise move data continuously,
 			// which hurts far more than the imbalance it is correcting.
 			settleAt = time.Now().Add(stabilityWindow)
@@ -39,13 +39,13 @@ func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
 }
 
 func (l *GatewayLogic) Rebalance(ctx context.Context) {
-	members := l.members.Members()
+	members := l.membershipRepo.Members()
 	if len(members) == 0 {
 		return
 	}
-	cfgs, err := l.queues.ListAll(ctx)
+	cfgs, err := l.queueTableRepo.ListAll(ctx)
 	if err != nil {
-		l.log.Warn("rebalance: list queues", "err", err)
+		l.log.Warn("rebalance: list queueTableRepo", "err", err)
 		return
 	}
 	cfgs = l.withPlacement(ctx, cfgs)
@@ -69,7 +69,7 @@ func (l *GatewayLogic) Rebalance(ctx context.Context) {
 		if !ok || want.ID == cfg.OwnerNode {
 			continue
 		}
-		from, live := l.members.Lookup(cfg.OwnerNode)
+		from, live := l.membershipRepo.Lookup(cfg.OwnerNode)
 		if !live {
 			// Its data is only there, so the assignment stays with it until it
 			// comes back. Reassigning would serve an empty queue.
@@ -80,11 +80,11 @@ func (l *GatewayLogic) Rebalance(ctx context.Context) {
 		}
 	}
 	if moved > 0 {
-		l.log.Info("rebalanced", "queues", moved, "members", len(members))
+		l.log.Info("rebalanced", "queueTableRepo", moved, "membershipRepo", len(members))
 	}
 }
 
-// rebalanceSlots moves the slots of a distributed queue that no longer hash to
+// rebalanceSlots moves the slotsPlacementTableRepo of a distributed queue that no longer hash to
 // their current owner. Slots are grouped by where they are moving from and to,
 // so one handoff carries everything going the same way.
 func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfig, members []entity.Member) bool {
@@ -101,7 +101,7 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 		if !ok || want.ID == current {
 			continue
 		}
-		if _, live := l.members.Lookup(current); !live {
+		if _, live := l.membershipRepo.Lookup(current); !live {
 			continue // its data is only there; nothing is reassigned
 		}
 		r := route{from: current, to: want.ID}
@@ -111,41 +111,41 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 		return false
 	}
 
-	if err := l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
+	if err := l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
 		return false
 	}
 	defer func() {
-		_ = l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
+		_ = l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
 		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	}()
 
 	nextGen := cfg.Generation + 1
 	done := 0
 	for r, slots := range moves {
-		from, okFrom := l.members.Lookup(r.from)
-		to, okTo := l.members.Lookup(r.to)
+		from, okFrom := l.membershipRepo.Lookup(r.from)
+		to, okTo := l.membershipRepo.Lookup(r.to)
 		if !okFrom || !okTo {
 			continue
 		}
 		spec := cfg.Spec()
-		transfer, err := l.nodes.Freeze(ctx, from.Addr, spec, slots)
+		transfer, err := l.nodesGRPCRepo.Freeze(ctx, from.Addr, spec, slots)
 		if err != nil {
-			l.log.Warn("rebalance slots: freeze", "queue", cfg.Name, "err", err)
+			l.log.Warn("rebalance slotsPlacementTableRepo: freeze", "queue", cfg.Name, "err", err)
 			continue
 		}
 		transfer.Spec = spec
 		transfer.Spec.Generation = nextGen
-		if err := l.nodes.Absorb(ctx, to.Addr, transfer); err != nil {
-			l.log.Warn("rebalance slots: absorb", "queue", cfg.Name, "err", err)
+		if err := l.nodesGRPCRepo.Absorb(ctx, to.Addr, transfer); err != nil {
+			l.log.Warn("rebalance slotsPlacementTableRepo: absorb", "queue", cfg.Name, "err", err)
 			continue
 		}
 		for _, slot := range slots {
-			if err := l.slots.SetOwner(ctx, cfg.Org, cfg.Name, slot, r.to, nextGen); err != nil {
-				l.log.Warn("rebalance slots: record", "queue", cfg.Name, "slot", slot, "err", err)
+			if err := l.slotsPlacementTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, slot, r.to, nextGen); err != nil {
+				l.log.Warn("rebalance slotsPlacementTableRepo: record", "queue", cfg.Name, "slot", slot, "err", err)
 			}
 		}
-		l.log.Info("moved slots", "org", cfg.Org, "queue", cfg.Name,
-			"slots", len(slots), "from", r.from, "to", r.to)
+		l.log.Info("moved slotsPlacementTableRepo", "org", cfg.Org, "queue", cfg.Name,
+			"slotsPlacementTableRepo", len(slots), "from", r.from, "to", r.to)
 		done++
 	}
 	return done > 0
@@ -156,18 +156,18 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 // after the old owner's.
 func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from, to entity.Member) error {
 	// One gateway at a time. Whoever flips the state to migrating owns the move.
-	if err := l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
+	if err := l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
 		return err
 	}
 	defer func() {
-		_ = l.queues.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
+		_ = l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateActive)
 		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	}()
 
 	l.log.Info("migrating queue", "org", cfg.Org, "queue", cfg.Name,
 		"from", from.ID, "to", to.ID)
 
-	transfer, err := l.nodes.Freeze(ctx, from.Addr, cfg.Spec(), nil)
+	transfer, err := l.nodesGRPCRepo.Freeze(ctx, from.Addr, cfg.Spec(), nil)
 	if err != nil {
 		l.log.Warn("migrate: freeze", "queue", cfg.Name, "err", err)
 		return err
@@ -177,14 +177,14 @@ func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from
 	transfer.Spec = cfg.Spec()
 	transfer.Spec.Generation = nextGen
 
-	if err := l.nodes.Absorb(ctx, to.Addr, transfer); err != nil {
+	if err := l.nodesGRPCRepo.Absorb(ctx, to.Addr, transfer); err != nil {
 		l.log.Warn("migrate: absorb", "queue", cfg.Name, "err", err)
 		return err
 	}
-	if err := l.queues.SetOwner(ctx, cfg.Org, cfg.Name, to.ID, nextGen); err != nil {
+	if err := l.queueTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, to.ID, nextGen); err != nil {
 		return err
 	}
-	_ = l.nodes.Drop(ctx, from.Addr, cfg.Spec())
+	_ = l.nodesGRPCRepo.Drop(ctx, from.Addr, cfg.Spec())
 
 	count := 0
 	for _, msgs := range transfer.BySlot {

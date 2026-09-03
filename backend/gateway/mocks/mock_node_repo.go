@@ -18,7 +18,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockNodeRepo is a mock of NodeRepo interface.
+// MockNodeRepo is a mock of NodeGRPCRepo interface.
 type MockNodeRepo struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeRepoMockRecorder

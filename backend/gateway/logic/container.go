@@ -34,7 +34,7 @@ func InitialiseGatewayLogic(ctx context.Context, cfg config.Gateway) (*GatewayLo
 		wire.Bind(new(entity.SlotPlacementTableRepo), new(*postgres.SlotPlacementTable)),
 
 		nodegrpc.New,
-		wire.Bind(new(entity.NodeRepo), new(*nodegrpc.Repo)),
+		wire.Bind(new(entity.NodeGRPCRepo), new(*nodegrpc.Repo)),
 
 		membershipetcd.New,
 		wire.Bind(new(entity.MembershipRepo), new(*membershipetcd.Repo)),

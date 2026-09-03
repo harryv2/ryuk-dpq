@@ -39,7 +39,7 @@ at zero so a clock adjustment cannot produce a negative age.
 **The gateway collects. Nothing scrapes a node.**
 
 ```go
-for _, m := range l.members.Members() {
+for _, m := range l.membershipRepo.Members() {
     nodeID, all, err := l.nodes.StatsAll(ctx, m.Addr)
     ...
 }

@@ -18,11 +18,11 @@ func (l *GatewayLogic) config(ctx context.Context, org, name string) (entity.Que
 // owner is one column; a distributed queue is placed per slot, so its owners
 // come from the placement table.
 func (l *GatewayLogic) loadConfig(ctx context.Context, org, name string) (entity.QueueConfig, error) {
-	cfg, err := l.queues.Get(ctx, org, name)
+	cfg, err := l.queueTableRepo.Get(ctx, org, name)
 	if err != nil || !cfg.Distributed {
 		return cfg, err
 	}
-	owners, err := l.slots.ListByQueue(ctx, org, name)
+	owners, err := l.slotsPlacementTableRepo.ListByQueue(ctx, org, name)
 	if err != nil {
 		return cfg, enterr.Internal("read slot placement", err)
 	}
@@ -30,14 +30,14 @@ func (l *GatewayLogic) loadConfig(ctx context.Context, org, name string) (entity
 	return cfg, nil
 }
 
-// withPlacement fills in slot owners for the distributed queues in a list.
+// withPlacement fills in slot owners for the distributed queueTableRepo in a list.
 // Callers that only need names and settings skip this.
 func (l *GatewayLogic) withPlacement(ctx context.Context, cfgs []entity.QueueConfig) []entity.QueueConfig {
 	for i := range cfgs {
 		if !cfgs[i].Distributed {
 			continue
 		}
-		owners, err := l.slots.ListByQueue(ctx, cfgs[i].Org, cfgs[i].Name)
+		owners, err := l.slotsPlacementTableRepo.ListByQueue(ctx, cfgs[i].Org, cfgs[i].Name)
 		if err != nil {
 			l.log.Warn("read slot placement", "queue", cfgs[i].Name, "err", err)
 			continue

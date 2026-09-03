@@ -36,13 +36,13 @@ type GatewayLogicInterface interface {
 }
 
 type GatewayLogic struct {
-	cfg     Config
-	log     *slog.Logger
-	queues  entity.QueueTableRepo
-	slots   entity.SlotPlacementTableRepo
-	nodes   entity.NodeRepo
-	members entity.MembershipRepo
-	series  entity.TimeseriesRepo
+	cfg                     Config
+	log                     *slog.Logger
+	queueTableRepo          entity.QueueTableRepo
+	slotsPlacementTableRepo entity.SlotPlacementTableRepo
+	nodesGRPCRepo           entity.NodeGRPCRepo
+	membershipRepo          entity.MembershipRepo
+	timeSeriesRepo          entity.TimeseriesRepo
 
 	wait    *waiters
 	subMu   sync.Mutex
@@ -59,7 +59,7 @@ func New(
 	log *slog.Logger,
 	queues entity.QueueTableRepo,
 	slots entity.SlotPlacementTableRepo,
-	nodes entity.NodeRepo,
+	nodes entity.NodeGRPCRepo,
 	members entity.MembershipRepo,
 	series entity.TimeseriesRepo,
 ) *GatewayLogic {
@@ -70,16 +70,16 @@ func New(
 		cfg.CollectEvery = 5 * time.Second
 	}
 	return &GatewayLogic{
-		cfg:     cfg,
-		log:     log,
-		queues:  queues,
-		slots:   slots,
-		nodes:   nodes,
-		members: members,
-		series:  series,
-		wait:    newWaiters(),
-		subOpen: map[string]bool{},
-		cache:   inmemorycache.NewInMemoryCache(log),
+		cfg:                     cfg,
+		log:                     log,
+		queueTableRepo:          queues,
+		slotsPlacementTableRepo: slots,
+		nodesGRPCRepo:           nodes,
+		membershipRepo:          members,
+		timeSeriesRepo:          series,
+		wait:                    newWaiters(),
+		subOpen:                 map[string]bool{},
+		cache:                   inmemorycache.NewInMemoryCache(log),
 	}
 }
 
@@ -88,5 +88,5 @@ func key(org, name string) string { return org + "/" + name }
 // WatchMembers starts following the cluster. Kept on the god struct so main
 // does not need to know which repo holds the membership.
 func (l *GatewayLogic) WatchMembers(ctx context.Context) error {
-	return l.members.Watch(ctx)
+	return l.membershipRepo.Watch(ctx)
 }

@@ -22,7 +22,7 @@ func (l *GatewayLogic) Dequeue(ctx context.Context, req entity.DequeueRequest) (
 			var msgs []entity.NodeMessage
 			err := l.withOwner(ctx, cfg, 0, func(addr string, spec entity.QueueSpec) error {
 				var err error
-				msgs, err = l.nodes.Dequeue(ctx, addr, spec, max)
+				msgs, err = l.nodesGRPCRepo.Dequeue(ctx, addr, spec, max)
 				return err
 			})
 			return msgs, err
@@ -32,7 +32,7 @@ func (l *GatewayLogic) Dequeue(ctx context.Context, req entity.DequeueRequest) (
 		// urgent work and fall through if it comes back empty.
 		var lastErr error
 		for _, addr := range l.rankedOwners(cfg) {
-			msgs, err := l.nodes.Dequeue(ctx, addr, cfg.Spec(), max)
+			msgs, err := l.nodesGRPCRepo.Dequeue(ctx, addr, cfg.Spec(), max)
 			if err != nil {
 				lastErr = err
 				continue

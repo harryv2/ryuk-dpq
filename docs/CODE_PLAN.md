@@ -159,11 +159,11 @@ The whole difference is in three places.
 
 ```go
 if !cfg.Distributed {
-    owner := entity.OwnerFor(key.String(), members)
+    owner := entity.OwnerFor(key.String(), membershipRepo)
     // queues.owner_node = owner
 } else {
     for slot := 0; slot < 16; slot++ {
-        owner := entity.OwnerFor(fmt.Sprintf("%s/slot-%d", key, slot), members)
+        owner := entity.OwnerFor(fmt.Sprintf("%s/slot-%d", key, slot), membershipRepo)
         // slot_placement row per slot
     }
 }
@@ -199,18 +199,18 @@ branches on the flag.
 **Membership** — each node writes one key and keeps renewing it:
 
 ```
-/ryuk/members/{hostname}  →  {"addr":"node-3:9090"}    lease TTL 10s
+/ryuk/membershipRepo/{hostname}  →  {"addr":"node-3:9090"}    lease TTL 10s
 ```
 
-`hostname` is the container's, so `--scale node=5` produces five distinct members with
+`hostname` is the container's, so `--scale node=5` produces five distinct membershipRepo with
 no configuration.
 
 **Choosing an owner** is a pure function, so no coordinator exists:
 
 ```go
-func OwnerFor(key string, members []Member) Member {
+func OwnerFor(key string, membershipRepo []Member) Member {
     best, bestScore := Member{}, uint64(0)
-    for _, m := range members {
+    for _, m := range membershipRepo {
         if s := xxhash.Sum64String(key + "\x00" + m.ID); s > bestScore {
             best, bestScore = m, s
         }
@@ -228,7 +228,7 @@ says otherwise, and the stored record wins (HLD §7, §12).
 ```go
 // after the member list has been stable for 15s
 for _, u := range n.owned() {
-    if want := entity.OwnerFor(u.Key(), members); want.ID != n.id {
+    if want := entity.OwnerFor(u.Key(), membershipRepo); want.ID != n.id {
         n.migrations <- migration{unit: u, to: want}   // max 2 concurrent
     }
 }

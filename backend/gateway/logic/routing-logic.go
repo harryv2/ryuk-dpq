@@ -59,7 +59,7 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 			continue
 		}
 		seen[id] = true
-		m, ok := l.members.Lookup(id)
+		m, ok := l.membershipRepo.Lookup(id)
 		if !ok {
 			continue
 		}
@@ -80,7 +80,7 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 
 // slotCountFor is the queue's shape, decided at creation and never changed. It
 // has to agree with engine.SlotCountFor: if the gateway thinks a queue has more
-// slots than the node does, a message lands in a slot the dispatcher never
+// slotsPlacementTableRepo than the node does, a message lands in a slot the dispatcher never
 // looks at and is never delivered.
 func slotCountFor(distributed bool) int {
 	if distributed {

@@ -16,7 +16,7 @@ func (l *GatewayLogic) Ack(ctx context.Context, req entity.AckRequest) error {
 		return err
 	}
 	return l.withOwner(ctx, cfg, slot, func(addr string, spec entity.QueueSpec) error {
-		return l.nodes.Ack(ctx, addr, spec, req.Receipt)
+		return l.nodesGRPCRepo.Ack(ctx, addr, spec, req.Receipt)
 	})
 }
 
@@ -30,7 +30,7 @@ func (l *GatewayLogic) Nack(ctx context.Context, req entity.NackRequest) error {
 		return err
 	}
 	return l.withOwner(ctx, cfg, slot, func(addr string, spec entity.QueueSpec) error {
-		return l.nodes.Nack(ctx, addr, spec, req.Receipt, req.DelayFor)
+		return l.nodesGRPCRepo.Nack(ctx, addr, spec, req.Receipt, req.DelayFor)
 	})
 }
 

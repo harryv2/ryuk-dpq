@@ -20,7 +20,7 @@ repo/nodegrpc/       one gRPC connection per node
 type GatewayLogic struct {
     configs entity.QueueConfigRepo
     nodes   entity.NodeRepo
-    members *membership.Client
+    membershipRepo *membership.Client
 
     wait  *waiters
     cache *cache.TTL[string, entity.QueueConfig]
@@ -77,7 +77,7 @@ Evicted immediately when a node says a queue has moved.
 ## 4. Placement
 
 ```go
-func OwnerFor(key string, members []Member) (Member, bool)   // rendezvous hashing
+func OwnerFor(key string, membershipRepo []Member) (Member, bool)   // rendezvous hashing
 ```
 
 Every gateway computes the same owner from the same member list, so there is
@@ -92,7 +92,7 @@ func (l *GatewayLogic) ownerAddr(ctx, cfg, slot) (string, string, error) {
     if cfg.Distributed { stored = cfg.SlotOwners[uint16(slot)] }
 
     if stored != "" {
-        if m, ok := l.members.Lookup(stored); ok { return stored, m.Addr, nil }
+        if m, ok := l.membershipRepo.Lookup(stored); ok { return stored, m.Addr, nil }
         // the owner is down; nothing is reassigned, because its data is only there
         return stored, "", enterr.New(enterr.CodeExhausted, ...)
     }
@@ -189,7 +189,7 @@ Waking releases **one** waiter, because a notification means one message.
 
 ```go
 func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
-    case <-l.members.Changed():
+    case <-l.membershipRepo.Changed():
         settleAt = time.Now().Add(stabilityWindow)   // 15s
     case <-tick.C:
         if past settleAt { l.Rebalance(ctx) }
@@ -225,7 +225,7 @@ batched into one handoff.
 ## 9. Collector
 
 ```go
-for _, m := range l.members.Members() {
+for _, m := range l.membershipRepo.Members() {
     nodeID, all, err := l.nodes.StatsAll(ctx, m.Addr)
     for _, s := range all {
         l.stats.Put(key(s.Org, s.Name), s)

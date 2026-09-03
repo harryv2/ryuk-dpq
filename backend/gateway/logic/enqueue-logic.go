@@ -24,7 +24,7 @@ func (l *GatewayLogic) Enqueue(ctx context.Context, req entity.EnqueueRequest) (
 	err = l.withOwner(ctx, cfg, int(slot), func(addr string, spec entity.QueueSpec) error {
 		s := slot
 		var err error
-		res, err = l.nodes.Enqueue(ctx, addr, entity.NodeEnqueue{
+		res, err = l.nodesGRPCRepo.Enqueue(ctx, addr, entity.NodeEnqueue{
 			Spec: spec, Slot: &s, Payload: req.Body, Priority: req.PriorityValue,
 			GroupID: req.GroupID, TTL: req.TTLFor, DeliverAfter: req.DeliverIn,
 		})

@@ -310,7 +310,7 @@ POST /v1/queues/{name}/messages/ack     { "receipt": "..." }
 ```
 POST   /v1/queues/{name}/messages/nack  { "receipt": "...", "delay": "5s" }  → 200
 DELETE /v1/queues/{name}                                                     → 202
-GET    /v1/cluster                       members, and where each queue sits
+GET    /v1/cluster                       membershipRepo, and where each queue sits
 GET    /v1/metrics                       every queue in the caller's org, JSON
 GET    /metrics                          the same numbers in Prometheus text format
 ```
@@ -478,7 +478,7 @@ Section 7 explains why placement is stored at all rather than computed.
 ### etcd — membership only
 
 ```
-/ryuk/members/{nodeID}  →  {"addr": "node-3:9090"}     lease TTL 10s, kept alive
+/ryuk/membershipRepo/{nodeID}  →  {"addr": "node-3:9090"}     lease TTL 10s, kept alive
 ```
 
 Stop renewing — crash, kill, scale down — and the key disappears. Gateways and nodes
@@ -526,9 +526,9 @@ The costs are one extra network hop, well under a millisecond in-region against 
 **Placement is a pure function of the member list, so nobody decides it.**
 
 ```go
-func OwnerFor(key string, members []Member) Member {
+func OwnerFor(key string, membershipRepo []Member) Member {
     best, bestScore := Member{}, uint64(0)
-    for _, m := range members {
+    for _, m := range membershipRepo {
         if s := hash(key + "\x00" + m.ID); s > bestScore {
             best, bestScore = m, s
         }
@@ -1029,7 +1029,7 @@ arrives next.
 
 ```
 1. The container starts with one setting: the etcd address
-2. It writes /ryuk/members/{hostname} with a 10s lease and keeps it alive
+2. It writes /ryuk/membershipRepo/{hostname} with a 10s lease and keeps it alive
 3. Every gateway and node sees the member list change within milliseconds
 4. Nothing happens for 15 seconds        ← the stability window
 ```
@@ -1043,7 +1043,7 @@ No coordinator, no election, no messages between nodes:
 
 ```go
 for _, s := range n.owned() {              // queues and slots this node holds
-    want := OwnerFor(s.Key(), members)
+    want := OwnerFor(s.Key(), membershipRepo)
     if want.ID != n.id {
         n.migrations <- migration{unit: s, to: want}    // at most 2 at a time
     }
@@ -1513,7 +1513,7 @@ not reach the other's queues.
 |---|---|---|---|
 | **Where a queue lives** | **One machine by default** | Every queue spread across machines | Exact ordering and counts, one hop, far less machinery |
 | **Spreading a queue** | **A `distributed` flag, default false** | Always on, or automatic | Only the queue that outgrows a machine pays the ordering cost |
-| Placement | Rendezvous hashing over live members | A map written by an elected coordinator | Deterministic, so nobody has to decide or agree |
+| Placement | Rendezvous hashing over live membershipRepo | A map written by an elected coordinator | Deterministic, so nobody has to decide or agree |
 | Placement is also **stored** | Yes, in Postgres | Recomputed per request | Ownership must follow the data, not the hash |
 | On owner loss | Block until the owner returns | Always fail over | Failing over without the data breaks group ordering permanently |
 | Slots per queue | 16 | 64, or sized to the cluster | Enough locks for one machine; caps fan-out when distributed |

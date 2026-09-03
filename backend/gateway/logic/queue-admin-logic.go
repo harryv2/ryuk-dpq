@@ -14,7 +14,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 	// The dead-letter queue has to exist now. Checking it only when a message
 	// runs out of retries would lose the message and report nothing.
 	if settings.DeadLetterQueue != "" {
-		dlq, err := l.queues.Get(ctx, req.Org, settings.DeadLetterQueue)
+		dlq, err := l.queueTableRepo.Get(ctx, req.Org, settings.DeadLetterQueue)
 		if err != nil {
 			if enterr.CodeOf(err) == enterr.CodeNotFound {
 				return entity.CreateQueueResponse{}, enterr.Invalid(
@@ -35,7 +35,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 		}
 	}
 
-	cfg, created, err := l.queues.Create(ctx, entity.QueueConfig{
+	cfg, created, err := l.queueTableRepo.Create(ctx, entity.QueueConfig{
 		Org: req.Org, Name: req.Name, Settings: settings,
 		Distributed: req.Distributed, OwnerNode: owner,
 	})
@@ -51,7 +51,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 			if err != nil {
 				break
 			}
-			if err := l.slots.SetOwner(ctx, req.Org, req.Name, uint16(slot), m.ID, 1); err != nil {
+			if err := l.slotsPlacementTableRepo.SetOwner(ctx, req.Org, req.Name, uint16(slot), m.ID, 1); err != nil {
 				return entity.CreateQueueResponse{}, enterr.Internal("place slot", err)
 			}
 		}
@@ -75,18 +75,18 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	}
 	// Mark first so gateways stop accepting, then drop the data, then remove
 	// the row: the deletion has to reach the owner before the name is free.
-	if err := l.queues.SetState(ctx, org, name, entity.StateDeleting); err != nil {
+	if err := l.queueTableRepo.SetState(ctx, org, name, entity.StateDeleting); err != nil {
 		return enterr.Internal("mark deleting", err)
 	}
 	l.evictCache(queueCacheKey(org, name))
 
 	if _, addr, err := l.ownerAddr(ctx, cfg, 0); err == nil && addr != "" {
-		_ = l.nodes.Drop(ctx, addr, cfg.Spec())
+		_ = l.nodesGRPCRepo.Drop(ctx, addr, cfg.Spec())
 	}
-	if err := l.slots.DeleteByQueue(ctx, org, name); err != nil {
+	if err := l.slotsPlacementTableRepo.DeleteByQueue(ctx, org, name); err != nil {
 		return enterr.Internal("delete slot placement", err)
 	}
-	if err := l.queues.Delete(ctx, org, name); err != nil {
+	if err := l.queueTableRepo.Delete(ctx, org, name); err != nil {
 		return enterr.Internal("delete queue", err)
 	}
 	l.evictCache(queueCacheKey(org, name))
@@ -94,9 +94,9 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 }
 
 func (l *GatewayLogic) ListQueues(ctx context.Context, org string) ([]entity.QueueSummary, error) {
-	cfgs, err := l.queues.ListByOrg(ctx, org)
+	cfgs, err := l.queueTableRepo.ListByOrg(ctx, org)
 	if err != nil {
-		return nil, enterr.Internal("list queues", err)
+		return nil, enterr.Internal("list queueTableRepo", err)
 	}
 	out := make([]entity.QueueSummary, 0, len(cfgs))
 	for _, c := range cfgs {

@@ -69,7 +69,7 @@ func (l *GatewayLogic) RunSubscriber(ctx context.Context, gatewayID string) {
 
 	for {
 		current := map[string]entity.Member{}
-		for _, m := range l.members.Members() {
+		for _, m := range l.membershipRepo.Members() {
 			current[m.ID] = m
 		}
 		for id, m := range current {
@@ -97,7 +97,7 @@ func (l *GatewayLogic) RunSubscriber(ctx context.Context, gatewayID string) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-l.members.Changed():
+		case <-l.membershipRepo.Changed():
 		case <-tick.C:
 		}
 	}
@@ -106,7 +106,7 @@ func (l *GatewayLogic) RunSubscriber(ctx context.Context, gatewayID string) {
 func (l *GatewayLogic) streamFrom(ctx context.Context, m entity.Member, gatewayID string, done func()) {
 	defer done()
 	for {
-		ch, err := l.nodes.Subscribe(ctx, m.Addr, gatewayID)
+		ch, err := l.nodesGRPCRepo.Subscribe(ctx, m.Addr, gatewayID)
 		if err != nil {
 			select {
 			case <-ctx.Done():

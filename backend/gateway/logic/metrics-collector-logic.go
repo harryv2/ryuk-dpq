@@ -15,8 +15,8 @@ func (l *GatewayLogic) Collect(ctx context.Context) {
 	// would leave whichever answered last, so the list would show a fraction.
 	totals := map[string]entity.NodeStats{}
 
-	for _, m := range l.members.Members() {
-		nodeID, all, err := l.nodes.StatsAll(ctx, m.Addr)
+	for _, m := range l.membershipRepo.Members() {
+		nodeID, all, err := l.nodesGRPCRepo.StatsAll(ctx, m.Addr)
 		if err != nil {
 			l.log.Debug("collect failed", "node", m.ID, "err", err)
 			continue
@@ -124,7 +124,7 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	if !cfg.Distributed {
 		_, addr, err := l.ownerAddr(ctx, cfg, 0)
 		if err == nil && addr != "" {
-			if s, err := l.nodes.Stats(ctx, addr, cfg.Spec()); err == nil {
+			if s, err := l.nodesGRPCRepo.Stats(ctx, addr, cfg.Spec()); err == nil {
 				return l.withRates(toStatsResponse(cfg, s, true), org, name), nil
 			}
 		}
@@ -142,16 +142,16 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	missing := 0
 
 	for owner, held := range slotsByOwner(cfg) {
-		m, live := l.members.Lookup(owner)
+		m, live := l.membershipRepo.Lookup(owner)
 		if !live {
 			// Its data is only there. Skipping silently is what makes a depth of
 			// zero look real while the messages sit on a machine that is down.
 			missing += held
 			continue
 		}
-		s, err := l.nodes.Stats(ctx, m.Addr, cfg.Spec())
+		s, err := l.nodesGRPCRepo.Stats(ctx, m.Addr, cfg.Spec())
 		if err != nil {
-			// It owns slots but has never been sent a message for them, so it has
+			// It owns slotsPlacementTableRepo but has never been sent a message for them, so it has
 			// no queue in memory. That is zero, not unreachable.
 			if enterr.CodeOf(err) == enterr.CodeNotFound {
 				continue
@@ -167,8 +167,8 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	return resp, nil
 }
 
-// slotsByOwner counts how many slots of this queue each machine holds, so an
-// unreachable machine can be reported as the number of slots it took with it.
+// slotsByOwner counts how many slotsPlacementTableRepo of this queue each machine holds, so an
+// unreachable machine can be reported as the number of slotsPlacementTableRepo it took with it.
 func slotsByOwner(cfg entity.QueueConfig) map[string]int {
 	out := map[string]int{}
 	for _, owner := range cfg.SlotOwners {
@@ -180,9 +180,9 @@ func slotsByOwner(cfg entity.QueueConfig) map[string]int {
 }
 
 func (l *GatewayLogic) Metrics(ctx context.Context, org string) ([]entity.QueueStatsResponse, error) {
-	cfgs, err := l.queues.ListByOrg(ctx, org)
+	cfgs, err := l.queueTableRepo.ListByOrg(ctx, org)
 	if err != nil {
-		return nil, enterr.Internal("list queues", err)
+		return nil, enterr.Internal("list queueTableRepo", err)
 	}
 	out := make([]entity.QueueStatsResponse, 0, len(cfgs))
 	for _, c := range cfgs {
@@ -193,9 +193,9 @@ func (l *GatewayLogic) Metrics(ctx context.Context, org string) ([]entity.QueueS
 }
 
 func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, error) {
-	cfgs, err := l.queues.ListAll(ctx)
+	cfgs, err := l.queueTableRepo.ListAll(ctx)
 	if err != nil {
-		return entity.ClusterResponse{}, enterr.Internal("list queues", err)
+		return entity.ClusterResponse{}, enterr.Internal("list queueTableRepo", err)
 	}
 	cfgs = l.withPlacement(ctx, cfgs)
 
@@ -237,7 +237,7 @@ func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, err
 	}
 
 	out := entity.ClusterResponse{}
-	for _, m := range l.members.Members() {
+	for _, m := range l.membershipRepo.Members() {
 		node := entity.ClusterNode{ID: m.ID, Addr: m.Addr, Queues: []entity.ClusterPlacement{}}
 		for _, k := range order[m.ID] {
 			p := meta[k]

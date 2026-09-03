@@ -78,10 +78,10 @@ func (c QueueConfig) Spec() QueueSpec {
 	}
 }
 
-// NodeRepo is how the gateway talks to a node. StatsAll answers for every queue
+// NodeGRPCRepo is how the gateway talks to a node. StatsAll answers for every queue
 // on that node in one call, so collecting metrics costs one request per node
 // rather than one per queue.
-type NodeRepo interface {
+type NodeGRPCRepo interface {
 	Enqueue(ctx context.Context, addr string, req NodeEnqueue) (NodeEnqueueResult, error)
 	Dequeue(ctx context.Context, addr string, spec QueueSpec, max int) ([]NodeMessage, error)
 	Ack(ctx context.Context, addr string, spec QueueSpec, receipt string) error

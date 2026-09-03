@@ -11,13 +11,13 @@ import (
 // function of the member list, so every gateway gets the same answer and
 // nothing has to be elected.
 func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool) (entity.Member, error) {
-	members := l.members.Members()
+	members := l.membershipRepo.Members()
 	if len(members) == 0 {
-		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodes available")
+		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodesGRPCRepo available")
 	}
 	m, ok := entity.OwnerFor(entity.OwnerKey(org, name, slot, distributed), members)
 	if !ok {
-		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodes available")
+		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodesGRPCRepo available")
 	}
 	return m, nil
 }
@@ -32,7 +32,7 @@ func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, sl
 	}
 
 	if stored != "" {
-		if m, ok := l.members.Lookup(stored); ok {
+		if m, ok := l.membershipRepo.Lookup(stored); ok {
 			return stored, m.Addr, nil
 		}
 		// the owner is down; nothing is reassigned, because its data is only there
@@ -46,9 +46,9 @@ func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, sl
 		return "", "", err
 	}
 	if cfg.Distributed {
-		err = l.slots.SetOwner(ctx, cfg.Org, cfg.Name, uint16(slot), m.ID, cfg.Generation)
+		err = l.slotsPlacementTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, uint16(slot), m.ID, cfg.Generation)
 	} else {
-		err = l.queues.SetOwner(ctx, cfg.Org, cfg.Name, m.ID, cfg.Generation)
+		err = l.queueTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, m.ID, cfg.Generation)
 	}
 	if err != nil {
 		return "", "", enterr.Internal("record owner", err)
