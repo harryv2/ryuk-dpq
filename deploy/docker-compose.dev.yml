@@ -1,0 +1,21 @@
+# Infrastructure only, for running the gateway and nodes from an IDE.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres etcd prometheus
+#
+# Postgres and etcd publish their ports so a process on the host can reach them,
+# and Prometheus scrapes the host instead of a gateway container.
+services:
+  postgres:
+    ports:
+      - "${RYUK_PG_PORT:-5432}:5432"
+
+  etcd:
+    ports:
+      - "${RYUK_ETCD_PORT:-2379}:2379"
+
+  prometheus:
+    volumes:
+      - ./prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ${RYUK_DATA:-../data}/prometheus:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

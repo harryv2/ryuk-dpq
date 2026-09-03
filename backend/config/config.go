@@ -54,6 +54,8 @@ type Node struct {
 }
 
 func LoadNode() Node {
+	loadDotenv("node")
+
 	n := Node{
 		Listen:      str("RYUK_LISTEN", ":9090"),
 		AdvertiseAs: str("RYUK_ADVERTISE", ""),
@@ -90,6 +92,8 @@ type Gateway struct {
 }
 
 func LoadGateway() Gateway {
+	loadDotenv("gateway")
+
 	return Gateway{
 		Listen:       str("RYUK_LISTEN", ":8080"),
 		Postgres:     str("RYUK_POSTGRES", "postgres://ryuk:ryuk@localhost:5432/ryuk?sslmode=disable"),

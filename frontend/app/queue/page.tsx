@@ -9,7 +9,7 @@ import { Busy, Empty, StatCard, age } from "@/lib/ui";
 
 type Tab = "send" | "poll";
 
-type Sent = { id: string; payload: string; priority: string; groupId: string; at: number };
+type Sent = { id: string; payload: string; priority: number; groupId: string; at: number };
 
 function QueueDetailInner() {
   const { org } = useOrg();
@@ -114,8 +114,17 @@ function SendPanel({
   queue: string; token: string; onSent: () => void; onError: (s: string) => void;
 }) {
   const [f, setF] = useState({
-    payload: "", priority: "HIGH", groupId: "", count: 1, ttl: "", deliverAfter: "",
+    payload: "", priority: "HIGH", custom: 90, groupId: "", count: 1, ttl: "", deliverAfter: "",
   });
+
+  // The API takes 0-100 as well as the three names; HIGH, MEDIUM and LOW are
+  // just 75, 50 and 25. "Custom" exposes the scale the names are shorthand for.
+  const priorityValue = () => (f.priority === "CUSTOM" ? f.custom : f.priority);
+
+  // What the names stand for, so the feed can colour and sort a sent message
+  // whichever way it was chosen.
+  const NAMED: Record<string, number> = { HIGH: 75, MEDIUM: 50, LOW: 25 };
+  const priorityNumber = () => (f.priority === "CUSTOM" ? f.custom : NAMED[f.priority]);
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState<Sent[]>([]);
 
@@ -131,7 +140,7 @@ function SendPanel({
         const payload = f.count > 1 ? `${f.payload} #${i + 1}` : f.payload;
         const res = await api.enqueue(token, queue, {
           payload,
-          priority: f.priority,
+          priority: priorityValue(),
           groupId: f.groupId || undefined,
           ttl: f.ttl || undefined,
           deliverAfter: f.deliverAfter || undefined,
@@ -139,7 +148,7 @@ function SendPanel({
         just.push({
           id: res?.messageId ?? "",
           payload,
-          priority: f.priority,
+          priority: priorityNumber(),
           groupId: f.groupId,
           at: Date.now(),
         });
@@ -170,11 +179,23 @@ function SendPanel({
           <label>
             <span>Priority</span>
             <select value={f.priority} onChange={(e) => set("priority", e.target.value)}>
-              <option>HIGH</option>
-              <option>MEDIUM</option>
-              <option>LOW</option>
+              <option value="HIGH">HIGH &middot; 75</option>
+              <option value="MEDIUM">MEDIUM &middot; 50</option>
+              <option value="LOW">LOW &middot; 25</option>
+              <option value="CUSTOM">Custom&hellip;</option>
             </select>
           </label>
+          {f.priority === "CUSTOM" && (
+            <label>
+              <span>Value (0&ndash;100)</span>
+              <input
+                type="number" min={0} max={100} value={f.custom}
+                onChange={(e) =>
+                  set("custom", Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                }
+              />
+            </label>
+          )}
           <label>
             <span>Group</span>
             <input
@@ -204,7 +225,9 @@ function SendPanel({
           Messages sharing a group are delivered one at a time, in order. Leave it
           empty and the queue is free to hand out messages in parallel. A message
           with a delivery time is held back and counted as delayed until it
-          arrives &mdash; nothing can take it before then.
+          arrives. Priority is a number from 0 to 100 and is ordered exactly:
+          91 is served before 90. The three names are shorthand, and metrics
+          group the scale into three bands.
         </p>
 
         <div className="row" style={{ marginTop: 16 }}>
@@ -229,7 +252,10 @@ function SendPanel({
           <ul className="feed">
             {recent.map((m) => (
               <li key={m.id + m.at} className="fade-in">
-                <span className={"tag " + m.priority.toLowerCase()}>{m.priority}</span>
+                <span className={"tag " + priorityLabel(m.priority).toLowerCase()}>
+                  {priorityLabel(m.priority)}
+                </span>
+                <span className="muted mono" style={{ fontSize: 11 }}>{m.priority}</span>
                 <span className="mono body">{m.payload}</span>
                 {m.groupId && <span className="mono muted group">{m.groupId}</span>}
               </li>
@@ -352,6 +378,9 @@ function PollPanel({
                 <td>
                   <span className={"tag " + priorityLabel(m.priority).toLowerCase()}>
                     {priorityLabel(m.priority)}
+                  </span>
+                  <span className="muted mono" style={{ marginLeft: 8, fontSize: 11 }}>
+                    {m.priority}
                   </span>
                 </td>
                 <td className="mono muted">{m.groupId || "—"}</td>

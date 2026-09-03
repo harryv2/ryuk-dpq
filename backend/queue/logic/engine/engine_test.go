@@ -392,3 +392,38 @@ func TestAbsorbDoesNotCountAsNewEnqueues(t *testing.T) {
 		t.Fatalf("drained %d of the 6 ready messages", drained)
 	}
 }
+
+// Priority is a number, not three levels: two values inside the same metrics
+// band still come out in the right order.
+func TestCustomPrioritiesAreOrderedExactly(t *testing.T) {
+	q, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+
+	// all three land in the HIGH band, and 100 > 91 > 70
+	for _, p := range []Priority{70, 100, 91} {
+		enq(t, q, p, "")
+	}
+	for _, want := range []Priority{100, 91, 70} {
+		m, r := mustDequeue(t, q)
+		if m.Priority != want {
+			t.Fatalf("got priority %d, want %d", m.Priority, want)
+		}
+		if err := q.Ack(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// The bands metrics report are a summary of the same scale.
+func TestBandsCoverTheWholeScale(t *testing.T) {
+	q, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	for _, p := range []Priority{0, 33, 34, 66, 67, 100} {
+		enq(t, q, p, "")
+	}
+	s := q.Stats()
+	if s.Ready[0] != 2 || s.Ready[1] != 2 || s.Ready[2] != 2 {
+		t.Fatalf("bands are %v; 0-33, 34-66 and 67-100 should hold two each", s.Ready)
+	}
+	if s.ReadyTotal() != 6 {
+		t.Fatalf("total %d, want 6", s.ReadyTotal())
+	}
+}

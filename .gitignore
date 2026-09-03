@@ -17,3 +17,9 @@ frontend/out
 # demo video: the compressed cut is committed for the README, the rest is not
 docs/demo/ryuk-demo.mp4
 docs/demo/composition/renders/
+/data/dev/
+
+# local configuration; .env.example is the template that is committed
+.env
+.env.*
+!.env.example

@@ -183,7 +183,7 @@ function MetricsInner() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head">
-          <h2>Ready messages by priority</h2>
+          <h2>Ready messages by priority band</h2>
           <div className="row">
             <div className="chart-filters">
               {BANDS.map((b) => (
@@ -191,10 +191,14 @@ function MetricsInner() {
                   key={b.key}
                   data-on={show[b.key]}
                   onClick={() => toggle(b.key)}
-                  title={show[b.key] ? `Hide ${b.label}` : `Show ${b.label}`}
+                  title={
+                    (show[b.key] ? `Hide ` : `Show `) +
+                    `${b.label} — priority ${b.range}`
+                  }
                 >
                   <span className="swatch" style={{ background: b.color }} />
                   {b.label}
+                  <span className="range">{b.range}</span>
                   <span className="n">{stats?.byPriority[b.key] ?? 0}</span>
                 </button>
               ))}
@@ -391,10 +395,14 @@ function Collecting() {
   );
 }
 
+// Priority is a number from 0 to 100 and is ordered exactly. Metrics report
+// three bands rather than 101 series: the engine keeps one counter per band per
+// slot, and 101 lines would be neither chartable nor cheap to store. The ranges
+// are shown so a custom value lands somewhere obvious.
 const BANDS = [
-  { key: "high" as const, color: "var(--high)", label: "high" },
-  { key: "medium" as const, color: "var(--medium)", label: "medium" },
-  { key: "low" as const, color: "var(--low)", label: "low" },
+  { key: "high" as const, color: "var(--high)", label: "high", range: "67–100" },
+  { key: "medium" as const, color: "var(--medium)", label: "medium", range: "34–66" },
+  { key: "low" as const, color: "var(--low)", label: "low", range: "0–33" },
 ];
 
 // One line per priority rather than a stacked area. Stacking made a band's own

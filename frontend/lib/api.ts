@@ -153,6 +153,14 @@ export function decodePayload(b64: string): string {
   }
 }
 
+// The band a value falls in, matching the engine's bucketOf: metrics report
+// three, but the value itself is ordered exactly.
+export const PRIORITY_BANDS = [
+  { key: "high", label: "high", from: 67, to: 100 },
+  { key: "medium", label: "medium", from: 34, to: 66 },
+  { key: "low", label: "low", from: 0, to: 33 },
+] as const;
+
 export function priorityLabel(p: number): string {
   if (p <= 33) return "LOW";
   if (p <= 66) return "MEDIUM";

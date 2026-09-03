@@ -367,3 +367,9 @@ label input, label select, label textarea { width: 100%; }
   padding: 4px 10px; font-size: 12px; border-radius: 6px;
 }
 .window-pick button[data-active="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+
+/* the numeric range a metrics band covers, shown beside its name */
+.chart-filters .range {
+  font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}

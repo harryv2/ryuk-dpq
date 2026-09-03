@@ -72,6 +72,50 @@ make down
 
 The UI is at <http://localhost:8090>, served by the gateway.
 
+### Running the Go processes yourself
+
+For stepping through the flow in a debugger: only Postgres, etcd and Prometheus
+run in Docker, and the gateway and nodes run from your IDE.
+
+```bash
+cp .env.example .env       # optional; both binaries read it at startup
+make infra                 # postgres :5432, etcd :2379, prometheus :9091
+make dev-env               # prints the variables for a run configuration
+
+make run-gateway           # or run backend/cmd/ryuk-gateway from the IDE
+make run-node N=1          # and one per node: N=2, N=3 ...
+make infra-down
+```
+
+Postgres and etcd publish their ports so a host process can reach them, and
+Prometheus scrapes `host.docker.internal:8080` instead of a gateway container,
+so the metrics charts still fill while the gateway sits on a breakpoint.
+
+Nodes listen on **9110, 9111, …** rather than 9090: Prometheus takes 9091 on the
+host, which a second node numbered from 9090 would collide with. Each gets its
+own `./data/dev/nodeN`, because a node takes its identity from its data
+directory and two sharing one would fight over the same id.
+
+The gateway serves the UI from `frontend/out`, so run `npm run build` in
+`frontend/` once if you want it; the API works without it.
+
+#### `.env`
+
+Both binaries read `.env` files at startup, so a local run needs no exported
+variables. A value is only ever filled in, never replaced, so the first source
+to define one wins:
+
+| | |
+|---|---|
+| the real environment | beats everything — a run configuration or `FOO=x go run …` |
+| `$RYUK_ENV_FILE` | an explicit path |
+| `.env.gateway` / `.env.node` | just that service |
+| `.env` | both, filling whatever is left |
+
+Start from [`.env.example`](.env.example). Missing files are the normal case in
+a container, where the environment is set directly, so nothing fails without
+them. `.env*` is gitignored apart from the example.
+
 ## Trying it
 
 ```bash
@@ -102,6 +146,12 @@ curl localhost:8090/v1/queues/orders/stats -H "$T"
 
 Ordering **within a group** is strict either way, because a group never spans
 slots. Two messages that must be ordered should share a group key.
+
+**Priority is a number from 0 to 100**, ordered exactly — 91 is served before 90.
+`HIGH`, `MEDIUM` and `LOW` are accepted as shorthand for 75, 50 and 25, and the
+UI offers them plus a custom value. Metrics group the scale into three bands
+(0–33, 34–66, 67–100): the engine keeps one counter per band per slot, and 101
+series would be neither chartable nor cheap to store.
 
 ## Where state lives
 

@@ -1,0 +1,11 @@
+# Scrapes a gateway running on the host rather than in a container, so metrics
+# and the history charts work while the gateway is under a debugger.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: ryuk-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8080"]

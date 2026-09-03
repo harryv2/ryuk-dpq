@@ -1,4 +1,5 @@
-.PHONY: build test test-race vet up down scale logs clean integration integration-fast
+.PHONY: build test test-race vet up down scale logs clean integration integration-fast \
+	infra infra-down infra-logs run-gateway run-node dev-env
 
 build:
 	go build ./backend/...
@@ -15,6 +16,64 @@ vet:
 # docker compose up, three nodes by default
 up:
 	cd deploy && docker compose up -d --build --scale node=3
+
+# ---------------------------------------------------------------------------
+# Running the Go processes yourself, with only the infrastructure in Docker.
+# Postgres and etcd publish their ports; Prometheus scrapes the host, so the
+# metrics charts still work while the gateway is under a debugger.
+
+DEV := -f docker-compose.yml -f docker-compose.dev.yml
+
+infra:
+	cd deploy && docker compose $(DEV) up -d postgres etcd prometheus
+	@echo
+	@echo "  postgres    localhost:5432   ryuk / ryuk / ryuk"
+	@echo "  etcd        localhost:2379"
+	@echo "  prometheus  http://localhost:9091"
+	@echo
+	@echo "  now run the gateway and a node -- 'make dev-env' prints the variables"
+
+infra-down:
+	cd deploy && docker compose $(DEV) down
+
+infra-logs:
+	cd deploy && docker compose $(DEV) logs -f postgres etcd prometheus
+
+# The gateway's defaults already point at localhost, so it needs little else.
+run-gateway:
+	RYUK_PROMETHEUS=http://localhost:9091 \
+	RYUK_STATIC_DIR=frontend/out \
+	RYUK_LOG_FORMAT=text \
+	go run ./backend/cmd/ryuk-gateway
+
+# make run-node N=2  -- a second node on its own port with its own data.
+# Ports start at 9110, not 9090: Prometheus publishes 9091 on the host, so
+# numbering from 9090 would collide with it on the second node.
+N ?= 1
+NODE_PORT = $(shell expr 9109 + $(N))
+run-node:
+	RYUK_LISTEN=:$(NODE_PORT) \
+	RYUK_ADVERTISE=localhost:$(NODE_PORT) \
+	RYUK_DATA_DIR=./data/dev/node$(N) \
+	RYUK_ETCD=localhost:2379 \
+	RYUK_LOG_FORMAT=text \
+	go run ./backend/cmd/ryuk-node
+
+# Paste these into an IDE run configuration.
+dev-env:
+	@echo "gateway:"
+	@echo "  RYUK_POSTGRES=postgres://ryuk:ryuk@localhost:5432/ryuk?sslmode=disable"
+	@echo "  RYUK_ETCD=localhost:2379"
+	@echo "  RYUK_PROMETHEUS=http://localhost:9091"
+	@echo "  RYUK_STATIC_DIR=frontend/out"
+	@echo "  RYUK_LOG_FORMAT=text"
+	@echo
+	@echo "node -- one run configuration per instance:"
+	@echo "  RYUK_LISTEN=:9110           # 9111, 9112 ... for more"
+	@echo "  RYUK_ADVERTISE=localhost:9110"
+	@echo "  RYUK_DATA_DIR=./data/dev/node1"
+	@echo "  RYUK_ETCD=localhost:2379"
+	@echo "  RYUK_LOG_FORMAT=text"
 
 # make scale N=6
 scale:

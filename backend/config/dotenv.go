@@ -1,0 +1,95 @@
+package config
+
+import (
+	"bufio"
+	"os"
+	"strings"
+)
+
+// loadDotenv reads .env files into the environment before the config is built,
+// so a local run needs no exported variables. It is best effort: a missing file
+// is the normal case in a container, where the environment is set directly.
+//
+// A variable is only ever filled in, never replaced, so the first source to
+// define one wins. Files are therefore read most specific first, and the real
+// environment -- which is checked before any of them -- beats all of it. That
+// is what lets a shared .env sit in the repo while a run configuration or a
+// shell override still takes precedence without editing the file.
+//
+//	$RYUK_ENV_FILE   an explicit path, wins over both files
+//	.env.<service>   just this one
+//	.env             both services, fills whatever is left
+func loadDotenv(service string) {
+	for _, name := range []string{os.Getenv("RYUK_ENV_FILE"), ".env." + service, ".env"} {
+		if name != "" {
+			applyEnvFile(name)
+		}
+	}
+}
+
+func applyEnvFile(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		key, value, ok := parseEnvLine(sc.Text())
+		if !ok {
+			continue
+		}
+		// The real environment is the authority; the file only fills gaps.
+		if _, set := os.LookupEnv(key); !set {
+			_ = os.Setenv(key, value)
+		}
+	}
+}
+
+// parseEnvLine reads one line. It reports ok=false for blanks, comments and
+// anything malformed, which are all skipped rather than failing the process:
+// a typo in a .env should not stop a node from starting with its real
+// environment.
+func parseEnvLine(line string) (key, value string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+	line = strings.TrimPrefix(line, "export ")
+
+	key, rest, found := strings.Cut(line, "=")
+	if !found {
+		return "", "", false
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", "", false
+	}
+
+	rest = strings.TrimSpace(rest)
+	switch {
+	case strings.HasPrefix(rest, `"`):
+		// A quoted value may contain '#' and spaces, and honours \n and \t.
+		value, ok = unquote(rest, '"')
+		if ok {
+			value = strings.NewReplacer(`\n`, "\n", `\t`, "\t", `\"`, `"`).Replace(value)
+		}
+	case strings.HasPrefix(rest, `'`):
+		value, ok = unquote(rest, '\'')
+	default:
+		// Unquoted: everything up to an unescaped comment.
+		if i := strings.Index(rest, " #"); i >= 0 {
+			rest = rest[:i]
+		}
+		value, ok = strings.TrimSpace(rest), true
+	}
+	return key, value, ok
+}
+
+func unquote(s string, q byte) (string, bool) {
+	if end := strings.IndexByte(s[1:], q); end >= 0 {
+		return s[1 : end+1], true
+	}
+	return "", false // unterminated quote: skip the line rather than guess
+}
