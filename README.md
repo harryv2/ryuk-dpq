@@ -1,7 +1,5 @@
 
 
-
-
 # Ryuk — Distributed Priority Queue
 
 A priority queue service. Producers submit work with a priority and an optional
@@ -21,7 +19,8 @@ tracks each message from submission to completion, and reports metrics.
 ## Demo
 
 
-https://github.com/user-attachments/assets/5af0e973-5d02-45a1-8b79-99fc9bf88ad4
+https://github.com/user-attachments/assets/56e27257-cc04-4d23-9bc4-b0747777d76a
+
 
 
 ## Architecture
