@@ -82,6 +82,16 @@ npm run render
 ```
 
 `build.py` owns the scene list and timings. Edit the list, never `index.html`.
+
+**Transitions.** Each scene runs `OVERLAP` seconds past its slot and the next one
+fades in over the top, giving a dissolve. Without the overlap a clip ends, its
+opaque fill goes with it, and the frame flashes dark before the next image
+arrives — that flash between screenshots is what reads as flicker. Layering is
+CSS `z-index` (ascending with scene order), not `data-track-index`, which
+HyperFrames uses only for the Studio timeline and never reads at render.
+
+To check it objectively, sample the brightness of a frame mid-transition against
+the frames either side; a dip means a scene is still going dark between shots.
 Short holds (1.0–1.2s) read like a recording; frames carrying an idea — the
 priority order, the cluster placement — hold 3s+.
 

@@ -1,5 +1,8 @@
 import io, json
 
+# how long one shot takes to dissolve into the next
+OVERLAP = 0.42
+
 # Short holds so the walkthrough reads like a recording rather than a slideshow.
 # The frames that carry an idea -- priority order, slot placement -- hold longer.
 SCENES = [
@@ -106,12 +109,23 @@ i = 0
 for kind, dur, a, b, c in SCENES:
     i += 1
     sid = f"s{i:02d}"
-    start, dur = round(t, 2), round(dur, 2)
-    t += dur
+    # Every scene runs a little past its slot and the next one fades in over the
+    # top, so one shot dissolves into the next. Without the overlap each clip
+    # ends, its opaque fill goes with it, and the frame flashes dark before the
+    # next image arrives -- which is the flicker between screenshots.
+    lap = round(min(OVERLAP, dur * 0.4), 2)
+    start = round(max(0.0, t - (lap if i > 1 else 0.0)), 2)
+    dur = round(dur + (lap if i > 1 else 0.0), 2)
+    t += dur - (lap if i > 1 else 0.0)
+    fade = lap if i > 1 else 0.0
+
+    if fade:
+        tweens.append(
+            f'tl.fromTo("#{sid}", {{ autoAlpha: 0 }}, {{ autoAlpha: 1, duration: {fade}, ease: "sine.inOut" }}, {start});')
 
     if kind == "title":
         parts.append(f'''
-      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0">
+      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0" style="z-index: {i}">
         <div class="fill"></div>
         <div class="card">
           <div class="inner">
@@ -128,11 +142,11 @@ for kind, dur, a, b, c in SCENES:
         </div>
       </div>''')
         for el, off in [("k", 0.30), ("h", 0.55), ("s", 0.95), ("r", 1.35)]:
-            tweens.append(f'tl.fromTo("#{sid}-{el}", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }}, {round(start+off,2)});')
+            tweens.append(f'tl.fromTo("#{sid}-{el}", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }}, {round(start+fade+off,2)});')
 
     elif kind == "div":
         parts.append(f'''
-      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0">
+      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0" style="z-index: {i}">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -141,8 +155,8 @@ for kind, dur, a, b, c in SCENES:
           </div>
         </div>
       </div>''')
-        tweens.append(f'tl.fromTo("#{sid}-k", {{ autoAlpha: 0, y: 18 }}, {{ autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }}, {round(start+0.12,2)});')
-        tweens.append(f'tl.fromTo("#{sid}-h", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }}, {round(start+0.28,2)});')
+        tweens.append(f'tl.fromTo("#{sid}-k", {{ autoAlpha: 0, y: 18 }}, {{ autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }}, {round(start+fade+0.12,2)});')
+        tweens.append(f'tl.fromTo("#{sid}-h", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }}, {round(start+fade+0.28,2)});')
 
     elif kind == "shot":
         # A frame with no caption is one step of a time-lapse: the band from the
@@ -151,17 +165,18 @@ for kind, dur, a, b, c in SCENES:
         if b:
             cap = f'\n        <div class="cap" id="{sid}-c"><span class="tag">{b}</span><span class="q">{c}</span></div>'
         parts.append(f'''
-      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0">
+      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0" style="z-index: {i}">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="{sid}-i" src="assets/{a}" alt="" /></div>{cap}
       </div>''')
         if b:
-            tweens.append(f'tl.fromTo("#{sid}-c", {{ autoAlpha: 0, y: 22 }}, {{ autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }}, {round(start+0.1,2)});')
-        tweens.append(f'tl.fromTo("#{sid}-i", {{ autoAlpha: 0, scale: 1.012 }}, {{ autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }}, {start});')
+            tweens.append(f'tl.fromTo("#{sid}-c", {{ autoAlpha: 0, y: 22 }}, {{ autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }}, {round(start+fade+0.1,2)});')
+        # a touch of scale so a cut between two near-identical frames still reads
+        tweens.append(f'tl.fromTo("#{sid}-i", {{ scale: 1.006 }}, {{ scale: 1, duration: 0.7, ease: "power2.out" }}, {start});')
 
     else:  # outro
         parts.append(f'''
-      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0">
+      <div class="clip scene" id="{sid}" data-start="{start}" data-duration="{dur}" data-track-index="0" style="z-index: {i}">
         <div class="fill"></div>
         <div class="card">
           <div class="inner">
@@ -179,7 +194,7 @@ for kind, dur, a, b, c in SCENES:
         </div>
       </div>''')
         for el, off in [("k", 0.30), ("h", 0.55), ("r", 1.00)]:
-            tweens.append(f'tl.fromTo("#{sid}-{el}", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }}, {round(start+off,2)});')
+            tweens.append(f'tl.fromTo("#{sid}-{el}", {{ autoAlpha: 0, y: 26 }}, {{ autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }}, {round(start+fade+off,2)});')
 
 total = round(t, 2)
 

@@ -52,7 +52,7 @@
       style="position: relative; width: 1920px; height: 1080px; background: #000"
     >
       <audio id="bgm" data-start="0" data-duration="166.5" data-track-index="9" data-volume="0.42" src="assets/bgm.m4a"></audio>
-      <div class="clip scene" id="s01" data-start="0.0" data-duration="7.0" data-track-index="0">
+      <div class="clip scene" id="s01" data-start="0.0" data-duration="7.0" data-track-index="0" style="z-index: 1">
         <div class="fill"></div>
         <div class="card">
           <div class="inner">
@@ -68,7 +68,7 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s02" data-start="7.0" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s02" data-start="6.58" data-duration="2.32" data-track-index="0" style="z-index: 2">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -77,17 +77,17 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s03" data-start="8.9" data-duration="3.4" data-track-index="0">
+      <div class="clip scene" id="s03" data-start="8.48" data-duration="3.82" data-track-index="0" style="z-index: 3">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s03-i" src="assets/001_cluster.png" alt="" /></div>
         <div class="cap" id="s03-c"><span class="tag">PLACEMENT</span><span class="q">Four nodes. A distributed queue&rsquo;s slots spread over all of them; a single-node queue is placed whole</span></div>
       </div>
-      <div class="clip scene" id="s04" data-start="12.3" data-duration="3.0" data-track-index="0">
+      <div class="clip scene" id="s04" data-start="11.88" data-duration="3.42" data-track-index="0" style="z-index: 4">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s04-i" src="assets/002_cluster_nodes.png" alt="" /></div>
         <div class="cap" id="s04-c"><span class="tag">NODES</span><span class="q">Each shows its container id, so a failure can be triggered by hand and watched</span></div>
       </div>
-      <div class="clip scene" id="s05" data-start="15.3" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s05" data-start="14.88" data-duration="2.32" data-track-index="0" style="z-index: 5">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -96,27 +96,27 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s06" data-start="17.2" data-duration="2.6" data-track-index="0">
+      <div class="clip scene" id="s06" data-start="16.78" data-duration="3.02" data-track-index="0" style="z-index: 6">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s06-i" src="assets/003_queues.png" alt="" /></div>
         <div class="cap" id="s06-c"><span class="tag">QUEUES</span><span class="q">Depth, in-flight, oldest age and owner node, per org</span></div>
       </div>
-      <div class="clip scene" id="s07" data-start="19.8" data-duration="2.2" data-track-index="0">
+      <div class="clip scene" id="s07" data-start="19.38" data-duration="2.62" data-track-index="0" style="z-index: 7">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s07-i" src="assets/004_new_blank.png" alt="" /></div>
         <div class="cap" id="s07-c"><span class="tag">SETTINGS</span><span class="q">Visibility timeout, retry limit, TTL, starvation threshold and reserve &mdash; and one placement choice</span></div>
       </div>
-      <div class="clip scene" id="s08" data-start="22.0" data-duration="1.6" data-track-index="0">
+      <div class="clip scene" id="s08" data-start="21.58" data-duration="2.02" data-track-index="0" style="z-index: 8">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s08-i" src="assets/005_new_named.png" alt="" /></div>
         <div class="cap" id="s08-c"><span class="tag">NAME</span><span class="q">Validated in the controller, before anything is stored</span></div>
       </div>
-      <div class="clip scene" id="s09" data-start="23.6" data-duration="2.0" data-track-index="0">
+      <div class="clip scene" id="s09" data-start="23.18" data-duration="2.42" data-track-index="0" style="z-index: 9">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s09-i" src="assets/006_created.png" alt="" /></div>
         <div class="cap" id="s09-c"><span class="tag">CREATED</span><span class="q">Placed on a node and empty. Nothing ready, nothing in flight</span></div>
       </div>
-      <div class="clip scene" id="s10" data-start="25.6" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s10" data-start="25.18" data-duration="2.32" data-track-index="0" style="z-index: 10">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -125,17 +125,17 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s11" data-start="27.5" data-duration="2.0" data-track-index="0">
+      <div class="clip scene" id="s11" data-start="27.08" data-duration="2.42" data-track-index="0" style="z-index: 11">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s11-i" src="assets/007_sent_one.png" alt="" /></div>
         <div class="cap" id="s11-c"><span class="tag">SEND</span><span class="q">First message at HIGH. What was queued appears beside the form</span></div>
       </div>
-      <div class="clip scene" id="s12" data-start="29.5" data-duration="3.6" data-track-index="0">
+      <div class="clip scene" id="s12" data-start="29.08" data-duration="4.02" data-track-index="0" style="z-index: 12">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s12-i" src="assets/008_sent_four.png" alt="" /></div>
         <div class="cap" id="s12-c"><span class="tag">FOUR IN</span><span class="q">Two HIGH, one MEDIUM, one LOW. Ready reads 4</span></div>
       </div>
-      <div class="clip scene" id="s13" data-start="33.1" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s13" data-start="32.68" data-duration="2.32" data-track-index="0" style="z-index: 13">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -144,52 +144,52 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s14" data-start="35.0" data-duration="2.0" data-track-index="0">
+      <div class="clip scene" id="s14" data-start="34.58" data-duration="2.42" data-track-index="0" style="z-index: 14">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s14-i" src="assets/009_poll_ready.png" alt="" /></div>
         <div class="cap" id="s14-c"><span class="tag">ONE AT A TIME</span><span class="q">Taking a single message per poll, so the order the queue hands them out is visible</span></div>
       </div>
-      <div class="clip scene" id="s15" data-start="37.0" data-duration="3.2" data-track-index="0">
+      <div class="clip scene" id="s15" data-start="36.58" data-duration="3.62" data-track-index="0" style="z-index: 15">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s15-i" src="assets/010_poll_high1.png" alt="" /></div>
         <div class="cap" id="s15-c"><span class="tag">HIGH FIRST</span><span class="q">Ready 4 &rarr; 3, in flight 1. The first HIGH comes out, attempt 1</span></div>
       </div>
-      <div class="clip scene" id="s16" data-start="40.2" data-duration="3.0" data-track-index="0">
+      <div class="clip scene" id="s16" data-start="39.78" data-duration="3.42" data-track-index="0" style="z-index: 16">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s16-i" src="assets/011_ack_high1.png" alt="" /></div>
         <div class="cap" id="s16-c"><span class="tag">ACK</span><span class="q">In flight back to 0, ready stays at 3 &mdash; acknowledged means gone, not returned</span></div>
       </div>
-      <div class="clip scene" id="s17" data-start="43.2" data-duration="2.6" data-track-index="0">
+      <div class="clip scene" id="s17" data-start="42.78" data-duration="3.02" data-track-index="0" style="z-index: 17">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s17-i" src="assets/012_poll_high2.png" alt="" /></div>
         <div class="cap" id="s17-c"><span class="tag">SECOND HIGH</span><span class="q">Ready 3 &rarr; 2. Both HIGH messages come out before anything else</span></div>
       </div>
-      <div class="clip scene" id="s18" data-start="45.8" data-duration="3.4" data-track-index="0">
+      <div class="clip scene" id="s18" data-start="45.38" data-duration="3.82" data-track-index="0" style="z-index: 18">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s18-i" src="assets/013_nack_high2.png" alt="" /></div>
         <div class="cap" id="s18-c"><span class="tag">NACK</span><span class="q">Ready climbs back to 3 &mdash; a nack returns the message instead of consuming it</span></div>
       </div>
-      <div class="clip scene" id="s19" data-start="49.2" data-duration="3.6" data-track-index="0">
+      <div class="clip scene" id="s19" data-start="48.78" data-duration="4.02" data-track-index="0" style="z-index: 19">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s19-i" src="assets/014_poll_high2_again.png" alt="" /></div>
         <div class="cap" id="s19-c"><span class="tag">REDELIVERED</span><span class="q">The same message, now attempt 2. Enough failures and it goes to the dead-letter queue</span></div>
       </div>
-      <div class="clip scene" id="s20" data-start="52.8" data-duration="2.6" data-track-index="0">
+      <div class="clip scene" id="s20" data-start="52.38" data-duration="3.02" data-track-index="0" style="z-index: 20">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s20-i" src="assets/015_poll_medium.png" alt="" /></div>
         <div class="cap" id="s20-c"><span class="tag">THEN MEDIUM</span><span class="q">Only once both HIGH messages are done does MEDIUM get its turn</span></div>
       </div>
-      <div class="clip scene" id="s21" data-start="55.4" data-duration="2.6" data-track-index="0">
+      <div class="clip scene" id="s21" data-start="54.98" data-duration="3.02" data-track-index="0" style="z-index: 21">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s21-i" src="assets/016_poll_low.png" alt="" /></div>
         <div class="cap" id="s21-c"><span class="tag">THEN LOW</span><span class="q">LOW last &mdash; strict priority, FIFO inside each band</span></div>
       </div>
-      <div class="clip scene" id="s22" data-start="58.0" data-duration="2.6" data-track-index="0">
+      <div class="clip scene" id="s22" data-start="57.58" data-duration="3.02" data-track-index="0" style="z-index: 22">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s22-i" src="assets/017_drained.png" alt="" /></div>
         <div class="cap" id="s22-c"><span class="tag">DRAINED</span><span class="q">Four in, four out, one of them twice because it was nacked</span></div>
       </div>
-      <div class="clip scene" id="s23" data-start="60.6" data-duration="2.2" data-track-index="0">
+      <div class="clip scene" id="s23" data-start="60.18" data-duration="2.62" data-track-index="0" style="z-index: 23">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -198,115 +198,115 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s24" data-start="62.8" data-duration="3.0" data-track-index="0">
+      <div class="clip scene" id="s24" data-start="62.38" data-duration="3.42" data-track-index="0" style="z-index: 24">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s24-i" src="assets/018_metrics_quiet.png" alt="" /></div>
         <div class="cap" id="s24-c"><span class="tag">AT REST</span><span class="q">Prometheus scrapes the gateway, so the history survives a reload and reaches back further than this tab has been open</span></div>
       </div>
-      <div class="clip scene" id="s25" data-start="65.8" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s25" data-start="65.38" data-duration="2.32" data-track-index="0" style="z-index: 25">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s25-i" src="assets/019_metrics_growing_00.png" alt="" /></div>
         <div class="cap" id="s25-c"><span class="tag">BACKLOG BUILDING</span><span class="q">Producers at five a second, consumers taking one</span></div>
       </div>
-      <div class="clip scene" id="s26" data-start="67.7" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s26" data-start="67.34" data-duration="1.26" data-track-index="0" style="z-index: 26">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s26-i" src="assets/020_metrics_growing_01.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s27" data-start="68.6" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s27" data-start="68.24" data-duration="1.26" data-track-index="0" style="z-index: 27">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s27-i" src="assets/021_metrics_growing_02.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s28" data-start="69.5" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s28" data-start="69.08" data-duration="2.32" data-track-index="0" style="z-index: 28">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s28-i" src="assets/022_metrics_growing_03.png" alt="" /></div>
         <div class="cap" id="s28-c"><span class="tag">WRITE ABOVE ACK</span><span class="q">The two throughput charts separate: arrivals climb, acknowledgements do not</span></div>
       </div>
-      <div class="clip scene" id="s29" data-start="71.4" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s29" data-start="71.04" data-duration="1.26" data-track-index="0" style="z-index: 29">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s29-i" src="assets/023_metrics_growing_04.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s30" data-start="72.3" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s30" data-start="71.94" data-duration="1.26" data-track-index="0" style="z-index: 30">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s30-i" src="assets/024_metrics_growing_05.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s31" data-start="73.2" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s31" data-start="72.78" data-duration="2.32" data-track-index="0" style="z-index: 31">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s31-i" src="assets/025_metrics_growing_06.png" alt="" /></div>
         <div class="cap" id="s31-c"><span class="tag">DEPTH CLIMBING</span><span class="q">Every band rising together, and the oldest message getting older</span></div>
       </div>
-      <div class="clip scene" id="s32" data-start="75.1" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s32" data-start="74.74" data-duration="1.26" data-track-index="0" style="z-index: 32">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s32-i" src="assets/026_metrics_growing_07.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s33" data-start="76.0" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s33" data-start="75.64" data-duration="1.26" data-track-index="0" style="z-index: 33">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s33-i" src="assets/027_metrics_growing_08.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s34" data-start="76.9" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s34" data-start="76.54" data-duration="1.26" data-track-index="0" style="z-index: 34">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s34-i" src="assets/028_metrics_growing_09.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s35" data-start="77.8" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s35" data-start="77.38" data-duration="2.32" data-track-index="0" style="z-index: 35">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s35-i" src="assets/029_metrics_growing_10.png" alt="" /></div>
         <div class="cap" id="s35-c"><span class="tag">SIX HUNDRED DEEP</span><span class="q">Thirteen a second in against two and a half out. This is what falling behind looks like</span></div>
       </div>
-      <div class="clip scene" id="s36" data-start="79.7" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s36" data-start="79.28" data-duration="2.32" data-track-index="0" style="z-index: 36">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s36-i" src="assets/030_metrics_draining_00.png" alt="" /></div>
         <div class="cap" id="s36-c"><span class="tag">CONSUMERS CATCH UP</span><span class="q">The ratio flips &mdash; one a second in, six out</span></div>
       </div>
-      <div class="clip scene" id="s37" data-start="81.6" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s37" data-start="81.24" data-duration="1.26" data-track-index="0" style="z-index: 37">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s37-i" src="assets/031_metrics_draining_01.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s38" data-start="82.5" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s38" data-start="82.14" data-duration="1.26" data-track-index="0" style="z-index: 38">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s38-i" src="assets/032_metrics_draining_02.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s39" data-start="83.4" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s39" data-start="82.98" data-duration="2.32" data-track-index="0" style="z-index: 39">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s39-i" src="assets/033_metrics_draining_03.png" alt="" /></div>
         <div class="cap" id="s39-c"><span class="tag">ACK ABOVE WRITE</span><span class="q">Sixteen a second acknowledged against two and a half arriving</span></div>
       </div>
-      <div class="clip scene" id="s40" data-start="85.3" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s40" data-start="84.94" data-duration="1.26" data-track-index="0" style="z-index: 40">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s40-i" src="assets/034_metrics_draining_04.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s41" data-start="86.2" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s41" data-start="85.84" data-duration="1.26" data-track-index="0" style="z-index: 41">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s41-i" src="assets/035_metrics_draining_05.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s42" data-start="87.1" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s42" data-start="86.68" data-duration="2.32" data-track-index="0" style="z-index: 42">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s42-i" src="assets/036_metrics_draining_06.png" alt="" /></div>
         <div class="cap" id="s42-c"><span class="tag">HIGH GOES FIRST</span><span class="q">The red band reaches zero before the others &mdash; priority holds under load</span></div>
       </div>
-      <div class="clip scene" id="s43" data-start="89.0" data-duration="0.9" data-track-index="0">
+      <div class="clip scene" id="s43" data-start="88.64" data-duration="1.26" data-track-index="0" style="z-index: 43">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s43-i" src="assets/037_metrics_draining_07.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s44" data-start="89.9" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s44" data-start="89.48" data-duration="2.32" data-track-index="0" style="z-index: 44">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s44-i" src="assets/038_metrics_draining_08.png" alt="" /></div>
         <div class="cap" id="s44-c"><span class="tag">DRAINED</span><span class="q">Back to a hundred, and still falling</span></div>
       </div>
-      <div class="clip scene" id="s45" data-start="91.8" data-duration="3.0" data-track-index="0">
+      <div class="clip scene" id="s45" data-start="91.38" data-duration="3.42" data-track-index="0" style="z-index: 45">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s45-i" src="assets/039_metrics_total.png" alt="" /></div>
         <div class="cap" id="s45-c"><span class="tag">TOTAL</span><span class="q">One line for the sum across every priority, when the overall depth is what matters</span></div>
       </div>
-      <div class="clip scene" id="s46" data-start="94.8" data-duration="2.8" data-track-index="0">
+      <div class="clip scene" id="s46" data-start="94.38" data-duration="3.22" data-track-index="0" style="z-index: 46">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s46-i" src="assets/040_metrics_filtered.png" alt="" /></div>
         <div class="cap" id="s46-c"><span class="tag">FILTER</span><span class="q">Hiding a band rescales the axis, so a small series is not flattened by a large one</span></div>
       </div>
-      <div class="clip scene" id="s47" data-start="97.6" data-duration="2.8" data-track-index="0">
+      <div class="clip scene" id="s47" data-start="97.18" data-duration="3.22" data-track-index="0" style="z-index: 47">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s47-i" src="assets/041_metrics_window.png" alt="" /></div>
         <div class="cap" id="s47-c"><span class="tag">WINDOW</span><span class="q">Five minutes, an hour, six, a day &mdash; served from stored history, not from this tab</span></div>
       </div>
-      <div class="clip scene" id="s48" data-start="100.4" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s48" data-start="99.98" data-duration="2.32" data-track-index="0" style="z-index: 48">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -315,22 +315,22 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s49" data-start="102.3" data-duration="2.8" data-track-index="0">
+      <div class="clip scene" id="s49" data-start="101.88" data-duration="3.22" data-track-index="0" style="z-index: 49">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s49-i" src="assets/042_events_queue.png" alt="" /></div>
         <div class="cap" id="s49-c"><span class="tag">SPREAD</span><span class="q">Slots placed independently, so counts are a point-in-time sum rather than an exact figure</span></div>
       </div>
-      <div class="clip scene" id="s50" data-start="105.1" data-duration="2.8" data-track-index="0">
+      <div class="clip scene" id="s50" data-start="104.68" data-duration="3.22" data-track-index="0" style="z-index: 50">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s50-i" src="assets/043_events_metrics.png" alt="" /></div>
         <div class="cap" id="s50-c"><span class="tag">SUMMED</span><span class="q">Every machine holding a slot is asked, and the answers added up</span></div>
       </div>
-      <div class="clip scene" id="s51" data-start="107.9" data-duration="3.2" data-track-index="0">
+      <div class="clip scene" id="s51" data-start="107.48" data-duration="3.62" data-track-index="0" style="z-index: 51">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s51-i" src="assets/044_placement.png" alt="" /></div>
         <div class="cap" id="s51-c"><span class="tag">SIXTY-FOUR SLOTS</span><span class="q">Spread over four nodes. The bar is how much of the queue each one holds</span></div>
       </div>
-      <div class="clip scene" id="s52" data-start="111.1" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s52" data-start="110.68" data-duration="2.32" data-track-index="0" style="z-index: 52">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -339,42 +339,42 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s53" data-start="113.0" data-duration="2.2" data-track-index="0">
+      <div class="clip scene" id="s53" data-start="112.58" data-duration="2.62" data-track-index="0" style="z-index: 53">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s53-i" src="assets/045_scaling_00.png" alt="" /></div>
         <div class="cap" id="s53-c"><span class="tag">SCALE TO SIX</span><span class="q">docker compose up --scale node=6. Nodes register themselves; nothing is told about them</span></div>
       </div>
-      <div class="clip scene" id="s54" data-start="115.2" data-duration="1.0" data-track-index="0">
+      <div class="clip scene" id="s54" data-start="114.8" data-duration="1.4" data-track-index="0" style="z-index: 54">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s54-i" src="assets/046_scaling_01.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s55" data-start="116.2" data-duration="1.0" data-track-index="0">
+      <div class="clip scene" id="s55" data-start="115.8" data-duration="1.4" data-track-index="0" style="z-index: 55">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s55-i" src="assets/047_scaling_02.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s56" data-start="117.2" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s56" data-start="116.78" data-duration="2.32" data-track-index="0" style="z-index: 56">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s56-i" src="assets/048_scaling_03.png" alt="" /></div>
         <div class="cap" id="s56-c"><span class="tag">REBALANCING</span><span class="q">Placement is a pure function of the member list, so every gateway agrees on what should move</span></div>
       </div>
-      <div class="clip scene" id="s57" data-start="119.1" data-duration="1.0" data-track-index="0">
+      <div class="clip scene" id="s57" data-start="118.7" data-duration="1.4" data-track-index="0" style="z-index: 57">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s57-i" src="assets/049_scaling_04.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s58" data-start="120.1" data-duration="1.0" data-track-index="0">
+      <div class="clip scene" id="s58" data-start="119.7" data-duration="1.4" data-track-index="0" style="z-index: 58">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s58-i" src="assets/050_scaling_05.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s59" data-start="121.1" data-duration="1.0" data-track-index="0">
+      <div class="clip scene" id="s59" data-start="120.7" data-duration="1.4" data-track-index="0" style="z-index: 59">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s59-i" src="assets/051_scaling_06.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s60" data-start="122.1" data-duration="3.4" data-track-index="0">
+      <div class="clip scene" id="s60" data-start="121.68" data-duration="3.82" data-track-index="0" style="z-index: 60">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s60-i" src="assets/052_scaling_07.png" alt="" /></div>
         <div class="cap" id="s60-c"><span class="tag">SIX NODES</span><span class="q">The slots moved onto the new machines. Freeze, ship, absorb &mdash; no message lost, no order broken</span></div>
       </div>
-      <div class="clip scene" id="s61" data-start="125.5" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s61" data-start="125.08" data-duration="2.32" data-track-index="0" style="z-index: 61">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -383,35 +383,35 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s62" data-start="127.4" data-duration="2.4" data-track-index="0">
+      <div class="clip scene" id="s62" data-start="126.98" data-duration="2.82" data-track-index="0" style="z-index: 62">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s62-i" src="assets/053_node_down_00.png" alt="" /></div>
         <div class="cap" id="s62-c"><span class="tag">DOCKER STOP</span><span class="q">One container killed outright</span></div>
       </div>
-      <div class="clip scene" id="s63" data-start="129.8" data-duration="1.2" data-track-index="0">
+      <div class="clip scene" id="s63" data-start="129.38" data-duration="1.62" data-track-index="0" style="z-index: 63">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s63-i" src="assets/054_node_down_01.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s64" data-start="131.0" data-duration="1.2" data-track-index="0">
+      <div class="clip scene" id="s64" data-start="130.58" data-duration="1.62" data-track-index="0" style="z-index: 64">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s64-i" src="assets/055_node_down_02.png" alt="" /></div>
       </div>
-      <div class="clip scene" id="s65" data-start="132.2" data-duration="4.0" data-track-index="0">
+      <div class="clip scene" id="s65" data-start="131.78" data-duration="4.42" data-track-index="0" style="z-index: 65">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s65-i" src="assets/056_node_down_03.png" alt="" /></div>
         <div class="cap" id="s65-c"><span class="tag">ONLY ITS SLOTS</span><span class="q">Five nodes. The gap in the bar is the slots that went with it &mdash; the rest keep serving</span></div>
       </div>
-      <div class="clip scene" id="s66" data-start="136.2" data-duration="3.4" data-track-index="0">
+      <div class="clip scene" id="s66" data-start="135.78" data-duration="3.82" data-track-index="0" style="z-index: 66">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s66-i" src="assets/057_events_degraded.png" alt="" /></div>
         <div class="cap" id="s66-c"><span class="tag">HONEST COUNTS</span><span class="q">The stats say how many slots are unreachable rather than reporting a smaller queue</span></div>
       </div>
-      <div class="clip scene" id="s67" data-start="139.6" data-duration="3.4" data-track-index="0">
+      <div class="clip scene" id="s67" data-start="139.18" data-duration="3.82" data-track-index="0" style="z-index: 67">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s67-i" src="assets/058_node_back.png" alt="" /></div>
         <div class="cap" id="s67-c"><span class="tag">AND BACK</span><span class="q">Restarted, it replays its log, re-registers, and its slots are whole again</span></div>
       </div>
-      <div class="clip scene" id="s68" data-start="143.0" data-duration="1.9" data-track-index="0">
+      <div class="clip scene" id="s68" data-start="142.58" data-duration="2.32" data-track-index="0" style="z-index: 68">
         <div class="fill"></div>
         <div class="divider">
           <div>
@@ -420,32 +420,32 @@
           </div>
         </div>
       </div>
-      <div class="clip scene" id="s69" data-start="144.9" data-duration="2.2" data-track-index="0">
+      <div class="clip scene" id="s69" data-start="144.48" data-duration="2.62" data-track-index="0" style="z-index: 69">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s69-i" src="assets/059_acme.png" alt="" /></div>
         <div class="cap" id="s69-c"><span class="tag">ACME</span><span class="q">Everything so far belongs to one org</span></div>
       </div>
-      <div class="clip scene" id="s70" data-start="147.1" data-duration="3.0" data-track-index="0">
+      <div class="clip scene" id="s70" data-start="146.68" data-duration="3.42" data-track-index="0" style="z-index: 70">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s70-i" src="assets/060_globex.png" alt="" /></div>
         <div class="cap" id="s70-c"><span class="tag">GLOBEX</span><span class="q">The org comes from the credential, never the URL &mdash; another tenant sees none of it</span></div>
       </div>
-      <div class="clip scene" id="s71" data-start="150.1" data-duration="1.8" data-track-index="0">
+      <div class="clip scene" id="s71" data-start="149.68" data-duration="2.22" data-track-index="0" style="z-index: 71">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s71-i" src="assets/061_dark_queues.png" alt="" /></div>
         <div class="cap" id="s71-c"><span class="tag">DARK</span><span class="q">Light and dark, remembered per browser</span></div>
       </div>
-      <div class="clip scene" id="s72" data-start="151.9" data-duration="2.4" data-track-index="0">
+      <div class="clip scene" id="s72" data-start="151.48" data-duration="2.82" data-track-index="0" style="z-index: 72">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s72-i" src="assets/062_dark_metrics.png" alt="" /></div>
         <div class="cap" id="s72-c"><span class="tag">SAME CHARTS</span><span class="q">Nothing is redrawn for a theme; the palette is read from tokens</span></div>
       </div>
-      <div class="clip scene" id="s73" data-start="154.3" data-duration="2.2" data-track-index="0">
+      <div class="clip scene" id="s73" data-start="153.88" data-duration="2.62" data-track-index="0" style="z-index: 73">
         <div class="fill"></div>
         <div class="shot" data-layout-allow-overflow><img id="s73-i" src="assets/063_dark_cluster.png" alt="" /></div>
         <div class="cap" id="s73-c"><span class="tag">SAME CLUSTER</span><span class="q"></span></div>
       </div>
-      <div class="clip scene" id="s74" data-start="156.5" data-duration="10.0" data-track-index="0">
+      <div class="clip scene" id="s74" data-start="156.08" data-duration="10.42" data-track-index="0" style="z-index: 74">
         <div class="fill"></div>
         <div class="card">
           <div class="inner">
@@ -471,131 +471,204 @@
       tl.fromTo("#s01-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.55);
       tl.fromTo("#s01-s", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.95);
       tl.fromTo("#s01-r", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out" }, 1.35);
+      tl.fromTo("#s02", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 6.58);
       tl.fromTo("#s02-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 7.12);
       tl.fromTo("#s02-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 7.28);
+      tl.fromTo("#s03", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 8.48);
       tl.fromTo("#s03-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 9.0);
-      tl.fromTo("#s03-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 8.9);
+      tl.fromTo("#s03-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 8.48);
+      tl.fromTo("#s04", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 11.88);
       tl.fromTo("#s04-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 12.4);
-      tl.fromTo("#s04-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 12.3);
+      tl.fromTo("#s04-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 11.88);
+      tl.fromTo("#s05", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 14.88);
       tl.fromTo("#s05-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 15.42);
       tl.fromTo("#s05-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 15.58);
+      tl.fromTo("#s06", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 16.78);
       tl.fromTo("#s06-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 17.3);
-      tl.fromTo("#s06-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 17.2);
+      tl.fromTo("#s06-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 16.78);
+      tl.fromTo("#s07", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 19.38);
       tl.fromTo("#s07-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 19.9);
-      tl.fromTo("#s07-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 19.8);
+      tl.fromTo("#s07-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 19.38);
+      tl.fromTo("#s08", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 21.58);
       tl.fromTo("#s08-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 22.1);
-      tl.fromTo("#s08-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 22.0);
+      tl.fromTo("#s08-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 21.58);
+      tl.fromTo("#s09", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 23.18);
       tl.fromTo("#s09-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 23.7);
-      tl.fromTo("#s09-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 23.6);
+      tl.fromTo("#s09-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 23.18);
+      tl.fromTo("#s10", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 25.18);
       tl.fromTo("#s10-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 25.72);
       tl.fromTo("#s10-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 25.88);
+      tl.fromTo("#s11", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 27.08);
       tl.fromTo("#s11-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 27.6);
-      tl.fromTo("#s11-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 27.5);
+      tl.fromTo("#s11-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 27.08);
+      tl.fromTo("#s12", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 29.08);
       tl.fromTo("#s12-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 29.6);
-      tl.fromTo("#s12-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 29.5);
+      tl.fromTo("#s12-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 29.08);
+      tl.fromTo("#s13", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 32.68);
       tl.fromTo("#s13-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 33.22);
       tl.fromTo("#s13-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 33.38);
+      tl.fromTo("#s14", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 34.58);
       tl.fromTo("#s14-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 35.1);
-      tl.fromTo("#s14-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 35.0);
+      tl.fromTo("#s14-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 34.58);
+      tl.fromTo("#s15", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 36.58);
       tl.fromTo("#s15-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 37.1);
-      tl.fromTo("#s15-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 37.0);
+      tl.fromTo("#s15-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 36.58);
+      tl.fromTo("#s16", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 39.78);
       tl.fromTo("#s16-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 40.3);
-      tl.fromTo("#s16-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 40.2);
+      tl.fromTo("#s16-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 39.78);
+      tl.fromTo("#s17", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 42.78);
       tl.fromTo("#s17-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 43.3);
-      tl.fromTo("#s17-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 43.2);
+      tl.fromTo("#s17-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 42.78);
+      tl.fromTo("#s18", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 45.38);
       tl.fromTo("#s18-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 45.9);
-      tl.fromTo("#s18-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 45.8);
+      tl.fromTo("#s18-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 45.38);
+      tl.fromTo("#s19", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 48.78);
       tl.fromTo("#s19-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 49.3);
-      tl.fromTo("#s19-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 49.2);
+      tl.fromTo("#s19-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 48.78);
+      tl.fromTo("#s20", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 52.38);
       tl.fromTo("#s20-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 52.9);
-      tl.fromTo("#s20-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 52.8);
+      tl.fromTo("#s20-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 52.38);
+      tl.fromTo("#s21", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 54.98);
       tl.fromTo("#s21-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 55.5);
-      tl.fromTo("#s21-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 55.4);
+      tl.fromTo("#s21-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 54.98);
+      tl.fromTo("#s22", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 57.58);
       tl.fromTo("#s22-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 58.1);
-      tl.fromTo("#s22-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 58.0);
+      tl.fromTo("#s22-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 57.58);
+      tl.fromTo("#s23", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 60.18);
       tl.fromTo("#s23-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 60.72);
       tl.fromTo("#s23-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 60.88);
+      tl.fromTo("#s24", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 62.38);
       tl.fromTo("#s24-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 62.9);
-      tl.fromTo("#s24-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 62.8);
+      tl.fromTo("#s24-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 62.38);
+      tl.fromTo("#s25", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 65.38);
       tl.fromTo("#s25-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 65.9);
-      tl.fromTo("#s25-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 65.8);
-      tl.fromTo("#s26-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 67.7);
-      tl.fromTo("#s27-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 68.6);
+      tl.fromTo("#s25-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 65.38);
+      tl.fromTo("#s26", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 67.34);
+      tl.fromTo("#s26-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 67.34);
+      tl.fromTo("#s27", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 68.24);
+      tl.fromTo("#s27-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 68.24);
+      tl.fromTo("#s28", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 69.08);
       tl.fromTo("#s28-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 69.6);
-      tl.fromTo("#s28-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 69.5);
-      tl.fromTo("#s29-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 71.4);
-      tl.fromTo("#s30-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 72.3);
+      tl.fromTo("#s28-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 69.08);
+      tl.fromTo("#s29", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 71.04);
+      tl.fromTo("#s29-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 71.04);
+      tl.fromTo("#s30", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 71.94);
+      tl.fromTo("#s30-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 71.94);
+      tl.fromTo("#s31", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 72.78);
       tl.fromTo("#s31-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 73.3);
-      tl.fromTo("#s31-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 73.2);
-      tl.fromTo("#s32-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 75.1);
-      tl.fromTo("#s33-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 76.0);
-      tl.fromTo("#s34-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 76.9);
+      tl.fromTo("#s31-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 72.78);
+      tl.fromTo("#s32", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 74.74);
+      tl.fromTo("#s32-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 74.74);
+      tl.fromTo("#s33", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 75.64);
+      tl.fromTo("#s33-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 75.64);
+      tl.fromTo("#s34", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 76.54);
+      tl.fromTo("#s34-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 76.54);
+      tl.fromTo("#s35", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 77.38);
       tl.fromTo("#s35-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 77.9);
-      tl.fromTo("#s35-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 77.8);
+      tl.fromTo("#s35-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 77.38);
+      tl.fromTo("#s36", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 79.28);
       tl.fromTo("#s36-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 79.8);
-      tl.fromTo("#s36-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 79.7);
-      tl.fromTo("#s37-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 81.6);
-      tl.fromTo("#s38-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 82.5);
+      tl.fromTo("#s36-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 79.28);
+      tl.fromTo("#s37", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 81.24);
+      tl.fromTo("#s37-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 81.24);
+      tl.fromTo("#s38", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 82.14);
+      tl.fromTo("#s38-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 82.14);
+      tl.fromTo("#s39", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 82.98);
       tl.fromTo("#s39-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 83.5);
-      tl.fromTo("#s39-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 83.4);
-      tl.fromTo("#s40-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 85.3);
-      tl.fromTo("#s41-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 86.2);
+      tl.fromTo("#s39-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 82.98);
+      tl.fromTo("#s40", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 84.94);
+      tl.fromTo("#s40-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 84.94);
+      tl.fromTo("#s41", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 85.84);
+      tl.fromTo("#s41-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 85.84);
+      tl.fromTo("#s42", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 86.68);
       tl.fromTo("#s42-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 87.2);
-      tl.fromTo("#s42-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 87.1);
-      tl.fromTo("#s43-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 89.0);
+      tl.fromTo("#s42-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 86.68);
+      tl.fromTo("#s43", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.36, ease: "sine.inOut" }, 88.64);
+      tl.fromTo("#s43-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 88.64);
+      tl.fromTo("#s44", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 89.48);
       tl.fromTo("#s44-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 90.0);
-      tl.fromTo("#s44-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 89.9);
+      tl.fromTo("#s44-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 89.48);
+      tl.fromTo("#s45", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 91.38);
       tl.fromTo("#s45-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 91.9);
-      tl.fromTo("#s45-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 91.8);
+      tl.fromTo("#s45-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 91.38);
+      tl.fromTo("#s46", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 94.38);
       tl.fromTo("#s46-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 94.9);
-      tl.fromTo("#s46-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 94.8);
+      tl.fromTo("#s46-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 94.38);
+      tl.fromTo("#s47", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 97.18);
       tl.fromTo("#s47-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 97.7);
-      tl.fromTo("#s47-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 97.6);
+      tl.fromTo("#s47-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 97.18);
+      tl.fromTo("#s48", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 99.98);
       tl.fromTo("#s48-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 100.52);
       tl.fromTo("#s48-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 100.68);
+      tl.fromTo("#s49", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 101.88);
       tl.fromTo("#s49-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 102.4);
-      tl.fromTo("#s49-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 102.3);
+      tl.fromTo("#s49-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 101.88);
+      tl.fromTo("#s50", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 104.68);
       tl.fromTo("#s50-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 105.2);
-      tl.fromTo("#s50-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 105.1);
+      tl.fromTo("#s50-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 104.68);
+      tl.fromTo("#s51", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 107.48);
       tl.fromTo("#s51-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 108.0);
-      tl.fromTo("#s51-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 107.9);
+      tl.fromTo("#s51-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 107.48);
+      tl.fromTo("#s52", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 110.68);
       tl.fromTo("#s52-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 111.22);
       tl.fromTo("#s52-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 111.38);
+      tl.fromTo("#s53", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 112.58);
       tl.fromTo("#s53-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 113.1);
-      tl.fromTo("#s53-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 113.0);
-      tl.fromTo("#s54-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 115.2);
-      tl.fromTo("#s55-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 116.2);
+      tl.fromTo("#s53-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 112.58);
+      tl.fromTo("#s54", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: "sine.inOut" }, 114.8);
+      tl.fromTo("#s54-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 114.8);
+      tl.fromTo("#s55", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: "sine.inOut" }, 115.8);
+      tl.fromTo("#s55-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 115.8);
+      tl.fromTo("#s56", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 116.78);
       tl.fromTo("#s56-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 117.3);
-      tl.fromTo("#s56-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 117.2);
-      tl.fromTo("#s57-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 119.1);
-      tl.fromTo("#s58-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 120.1);
-      tl.fromTo("#s59-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 121.1);
+      tl.fromTo("#s56-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 116.78);
+      tl.fromTo("#s57", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: "sine.inOut" }, 118.7);
+      tl.fromTo("#s57-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 118.7);
+      tl.fromTo("#s58", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: "sine.inOut" }, 119.7);
+      tl.fromTo("#s58-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 119.7);
+      tl.fromTo("#s59", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: "sine.inOut" }, 120.7);
+      tl.fromTo("#s59-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 120.7);
+      tl.fromTo("#s60", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 121.68);
       tl.fromTo("#s60-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 122.2);
-      tl.fromTo("#s60-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 122.1);
+      tl.fromTo("#s60-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 121.68);
+      tl.fromTo("#s61", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 125.08);
       tl.fromTo("#s61-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 125.62);
       tl.fromTo("#s61-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 125.78);
+      tl.fromTo("#s62", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 126.98);
       tl.fromTo("#s62-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 127.5);
-      tl.fromTo("#s62-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 127.4);
-      tl.fromTo("#s63-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 129.8);
-      tl.fromTo("#s64-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 131.0);
+      tl.fromTo("#s62-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 126.98);
+      tl.fromTo("#s63", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 129.38);
+      tl.fromTo("#s63-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 129.38);
+      tl.fromTo("#s64", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 130.58);
+      tl.fromTo("#s64-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 130.58);
+      tl.fromTo("#s65", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 131.78);
       tl.fromTo("#s65-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 132.3);
-      tl.fromTo("#s65-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 132.2);
+      tl.fromTo("#s65-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 131.78);
+      tl.fromTo("#s66", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 135.78);
       tl.fromTo("#s66-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 136.3);
-      tl.fromTo("#s66-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 136.2);
+      tl.fromTo("#s66-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 135.78);
+      tl.fromTo("#s67", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 139.18);
       tl.fromTo("#s67-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 139.7);
-      tl.fromTo("#s67-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 139.6);
+      tl.fromTo("#s67-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 139.18);
+      tl.fromTo("#s68", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 142.58);
       tl.fromTo("#s68-k", { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" }, 143.12);
       tl.fromTo("#s68-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: "power2.out" }, 143.28);
+      tl.fromTo("#s69", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 144.48);
       tl.fromTo("#s69-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 145.0);
-      tl.fromTo("#s69-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 144.9);
+      tl.fromTo("#s69-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 144.48);
+      tl.fromTo("#s70", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 146.68);
       tl.fromTo("#s70-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 147.2);
-      tl.fromTo("#s70-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 147.1);
+      tl.fromTo("#s70-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 146.68);
+      tl.fromTo("#s71", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 149.68);
       tl.fromTo("#s71-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 150.2);
-      tl.fromTo("#s71-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 150.1);
+      tl.fromTo("#s71-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 149.68);
+      tl.fromTo("#s72", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 151.48);
       tl.fromTo("#s72-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 152.0);
-      tl.fromTo("#s72-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 151.9);
+      tl.fromTo("#s72-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 151.48);
+      tl.fromTo("#s73", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 153.88);
       tl.fromTo("#s73-c", { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.42, ease: "power2.out" }, 154.4);
-      tl.fromTo("#s73-i", { autoAlpha: 0, scale: 1.012 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 154.3);
+      tl.fromTo("#s73-i", { scale: 1.006 }, { scale: 1, duration: 0.7, ease: "power2.out" }, 153.88);
+      tl.fromTo("#s74", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.42, ease: "sine.inOut" }, 156.08);
       tl.fromTo("#s74-k", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 156.8);
       tl.fromTo("#s74-h", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 157.05);
       tl.fromTo("#s74-r", { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: 0.65, ease: "power2.out" }, 157.5);
