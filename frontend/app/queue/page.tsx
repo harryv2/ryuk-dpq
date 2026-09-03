@@ -63,7 +63,7 @@ function QueueDetailInner() {
             )}
             {stats?.ownerNode && (
               <>
-                {" "}owner <span className="mono">{stats.ownerNode}</span>
+                {" "}owner node <span className="mono">{stats.ownerNode}</span>
               </>
             )}
             {stats && !stats.exact && <> · counts are a point-in-time sum</>}

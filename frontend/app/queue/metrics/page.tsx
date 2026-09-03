@@ -9,6 +9,18 @@ import { StatCard, age } from "@/lib/ui";
 import { useWidth } from "@/lib/measure";
 
 type Band = "low" | "medium" | "high";
+type Line = Band | "total";
+
+// One chart point, whichever source it came from.
+type SeriesPoint = { t: number; v: number };
+
+// Prometheus returns a series per label value; the name is empty when a metric
+// has only one series.
+function pointsFor(series: Series[], name: string): SeriesPoint[] {
+  const s = name ? series.find((x) => x.name === name) : series[0];
+  if (!s) return [];
+  return s.points.map((p) => ({ t: new Date(p.at).getTime(), v: p.value }));
+}
 
 type Point = {
   t: number;
@@ -18,6 +30,11 @@ type Point = {
 
 // Rates come from the gateway, which derives them from two collections; a node
 // only reports totals.
+// Axis labels on the rate charts, matching the cards above them.
+function perSec(v: number): string {
+  return v < 10 ? v.toFixed(1) : String(Math.round(v));
+}
+
 function rate(v?: number): string {
   if (!v) return "0/s";
   return (v < 10 ? v.toFixed(1) : Math.round(v).toString()) + "/s";
@@ -40,8 +57,10 @@ function MetricsInner() {
   const [, tick] = useState(0);
   const [range, setRange] = useState(RANGES[0]);
   const [history, setHistory] = useState<Timeseries | null>(null);
-  const [show, setShow] = useState<Record<Band, boolean>>({ high: true, medium: true, low: true });
-  const allShown = show.high && show.medium && show.low;
+  const [show, setShow] = useState<Record<Line, boolean>>({
+    high: true, medium: true, low: true, total: false,
+  });
+
 
   useEffect(() => {
     samples.current = [];
@@ -106,6 +125,21 @@ function MetricsInner() {
   const inFlightPoints = stored
     ? pointsFor(history!.inFlight, "")
     : local.map((p) => ({ t: p.t, v: p.inFlight }));
+  // The total across every priority. Summed here rather than asked for
+  // separately: the three series come from one query at one step, so they share
+  // timestamps and adding them is exact.
+  const totalPoints: SeriesPoint[] = (() => {
+    const by = new Map<number, number>();
+    for (const b of ["high", "medium", "low"] as Band[]) {
+      for (const p of bands[b]) by.set(p.t, (by.get(p.t) ?? 0) + p.v);
+    }
+    return [...by.entries()].sort((x, y) => x[0] - y[0]).map(([t, v]) => ({ t, v }));
+  })();
+
+  const enqueueRatePoints = stored
+    ? pointsFor(history!.rates, "enqueue")
+    : [];
+  const ackRatePoints = stored ? pointsFor(history!.rates, "ack") : [];
   const agePoints = stored
     ? pointsFor(history!.oldestAge, "")
     : local.map((p) => ({ t: p.t, v: p.ageSeconds }));
@@ -114,8 +148,7 @@ function MetricsInner() {
   const span = covered > 1
     ? ((bands.high[covered - 1]?.t ?? 0) - (bands.high[0]?.t ?? 0)) / 1000
     : 0;
-  const toggle = (b: Band) => setShow({ ...show, [b]: !show[b] });
-  const showAll = () => setShow({ high: true, medium: true, low: true });
+  const toggle = (b: Line) => setShow({ ...show, [b]: !show[b] });
 
   return (
     <>
@@ -123,7 +156,8 @@ function MetricsInner() {
         <div>
           <h1>{name}</h1>
           <p className="sub">
-            <span className="live-dot" /> live · {h.length} samples over {span}s
+            <span className="live-dot" /> live · {covered} points over {age(span)}
+            {stored ? <> · from Prometheus</> : <> · sampled in this tab</>}
             {stats && !stats.exact && <> · summed across machines</>}
           </p>
         </div>
@@ -141,10 +175,10 @@ function MetricsInner() {
           label="Ack rate" value={rate(stats?.ackRate)} loading={loading}
           hint="per second, last interval"
         />
-        <StatCard label="Enqueued" value={(stats?.enqueued ?? 0).toLocaleString()} loading={loading} hint="since the owner started" />
-        <StatCard label="Acknowledged" value={(stats?.acked ?? 0).toLocaleString()} loading={loading} hint="since the owner started" />
         <StatCard label="Redelivered" value={(stats?.redelivered ?? 0).toLocaleString()} loading={loading} hint="nacked or timed out" />
+        <StatCard label="Dead-lettered" value={(stats?.deadLettered ?? 0).toLocaleString()} loading={loading} hint="ran out of retries" />
         <StatCard label="Expired" value={(stats?.expired ?? 0).toLocaleString()} loading={loading} hint="outlived their TTL" />
+        <StatCard label="Starvation escapes" value={(stats?.starvationEscapes ?? 0).toLocaleString()} loading={loading} hint="used the reserved share" small />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -165,36 +199,63 @@ function MetricsInner() {
                 </button>
               ))}
               <button
-                onClick={showAll}
-                disabled={allShown}
-                title={allShown ? "Every priority is already shown" : "Show every priority"}
+                data-on={show.total}
+                onClick={() => toggle("total")}
+                title={show.total ? "Hide the total" : "Show the total across every priority"}
               >
-                all
+                <span className="swatch" style={{ background: "var(--text-soft)" }} />
+                total
+                <span className="n">
+                  {(stats?.byPriority.high ?? 0) +
+                    (stats?.byPriority.medium ?? 0) +
+                    (stats?.byPriority.low ?? 0)}
+                </span>
               </button>
             </div>
             <div className="window-pick">
-              {RANGES.map((r) => {
-                const reached = collected >= r.samples || r.samples >= WINDOW;
-                return (
-                  <button
-                    key={r.label}
-                    data-active={r.label === range.label}
-                    disabled={!reached}
-                    onClick={() => setRange(r)}
-                    title={
-                      reached
-                        ? `Last ${r.label}`
-                        : `Needs ${r.samples} samples, ${collected} collected`
-                    }
-                  >
-                    {r.label}
-                  </button>
-                );
-              })}
+              {RANGES.map((r) => (
+                <button
+                  key={r}
+                  data-active={r === range}
+                  disabled={!stored && r !== RANGES[0]}
+                  onClick={() => setRange(r)}
+                  title={
+                    stored
+                      ? `Last ${r}`
+                      : "Needs the monitoring system; this tab only has what it sampled itself"
+                  }
+                >
+                  {r}
+                </button>
+              ))}
             </div>
           </div>
         </div>
-        <PriorityLines data={h} show={show} />
+        <PriorityLines bands={bands} total={totalPoints} show={show} />
+      </div>
+
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="card-head">
+            <h2>Write throughput</h2>
+            <span className="muted" style={{ fontSize: 12 }}>{rate(stats?.enqueueRate)}</span>
+          </div>
+          <LineArea points={enqueueRatePoints} color="var(--ok)" format={perSec} />
+          <p className="field-hint" style={{ marginTop: 10 }}>
+            Messages accepted per second, across every machine holding a slot.
+          </p>
+        </div>
+        <div className="card">
+          <div className="card-head">
+            <h2>Ack rate</h2>
+            <span className="muted" style={{ fontSize: 12 }}>{rate(stats?.ackRate)}</span>
+          </div>
+          <LineArea points={ackRatePoints} color="var(--accent)" format={perSec} />
+          <p className="field-hint" style={{ marginTop: 10 }}>
+            Consumers finishing work. Sitting below the write rate for long means
+            the queue is growing faster than it drains.
+          </p>
+        </div>
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>
@@ -203,19 +264,37 @@ function MetricsInner() {
             <h2>Oldest message age</h2>
             <span className="muted" style={{ fontSize: 12 }}>{age(stats?.oldestMessageAgeSeconds ?? 0)}</span>
           </div>
-          <LineArea
-            data={h.map((p) => p.ageSeconds)}
-            color="var(--medium)"
-            format={(v) => age(v)}
-          />
+          <LineArea points={agePoints} color="var(--medium)" format={(v) => age(v)} />
         </div>
         <div className="card">
           <div className="card-head">
             <h2>In flight</h2>
             <span className="muted" style={{ fontSize: 12 }}>{stats?.inFlight ?? 0} held</span>
           </div>
-          <LineArea data={h.map((p) => p.inFlight)} color="var(--accent)" />
+          <LineArea points={inFlightPoints} color="var(--accent)" />
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-head">
+          <h2>Totals since this owner node started</h2>
+        </div>
+        <div className="grid cols-4">
+          <div className="stat">
+            <div className="label">Enqueued</div>
+            <div className="value sm">{(stats?.enqueued ?? 0).toLocaleString()}</div>
+          </div>
+          <div className="stat">
+            <div className="label">Acknowledged</div>
+            <div className="value sm">{(stats?.acked ?? 0).toLocaleString()}</div>
+          </div>
+        </div>
+        <p className="field-hint" style={{ marginTop: 12, maxWidth: 720 }}>
+          These live in the owning node&rsquo;s memory, so a restart resets them and a
+          distributed queue&rsquo;s totals drop when one of its machines restarts. Read
+          the rates above instead; they are derived from the change between two
+          collections and are unaffected.
+        </p>
       </div>
 
       <div className="card">
@@ -290,13 +369,14 @@ function Axes({ g, max, format }: { g: Geom; max: number; format: (v: number) =>
 
 // Samples are a fixed interval apart, so the axis is labelled from the count
 // without carrying timestamps into the chart.
-function XAxis({ g, count }: { g: Geom; count: number }) {
-  const oldest = ((count - 1) * SAMPLE_MS) / 1000;
+function XAxis({ g, points }: { g: Geom; points: SeriesPoint[] }) {
+  const oldest =
+    points.length > 1 ? (points[points.length - 1].t - points[0].t) / 1000 : 0;
   const y = PAD.top + g.ph + 16;
   return (
     <>
       <line className="grid-line" x1={PAD.left} x2={PAD.left + g.pw} y1={PAD.top + g.ph} y2={PAD.top + g.ph} />
-      <text className="axis-text" x={PAD.left} y={y}>-{Math.round(oldest)}s</text>
+      <text className="axis-text" x={PAD.left} y={y}>-{age(oldest)}</text>
       <text className="axis-text" x={PAD.left + g.pw} y={y} textAnchor="end">now</text>
     </>
   );
@@ -320,67 +400,76 @@ const BANDS = [
 // One line per priority rather than a stacked area. Stacking made a band's own
 // value unreadable -- you had to subtract the layers beneath it -- and a band
 // sitting at zero was an invisible sliver rather than a flat line on the floor.
-function PriorityLines({ data, show }: { data: Point[]; show: Record<Band, boolean> }) {
+function PriorityLines({
+  bands, total, show,
+}: {
+  bands: Record<Band, SeriesPoint[]>;
+  total: SeriesPoint[];
+  show: Record<Line, boolean>;
+}) {
   const { ref, width } = useWidth<HTMLDivElement>();
-  const visible = BANDS.filter((b) => show[b.key]);
 
-  // Scaled to the largest single series, not their sum, so each line uses the
-  // full height it can.
-  const peak = Math.max(0, ...data.flatMap((p) => visible.map((b) => p[b.key])));
+  const drawn = [
+    ...BANDS.filter((b) => show[b.key]).map((b) => ({ ...b, points: bands[b.key] })),
+    ...(show.total ? [{ key: "total", color: "var(--text-soft)", points: total }] : []),
+  ].filter((l) => l.points.length > 1);
+
+  // Scaled to the largest line on screen. The total is the sum of the bands, so
+  // turning it on rescales everything -- which is the point: it shows how each
+  // band contributes to the depth.
+  const peak = Math.max(0, ...drawn.flatMap((l) => l.points.map((p) => p.v)));
   const max = niceMax(peak);
   const g = geometry(width, max);
 
-  if (data.length < 2) {
-    return <div ref={ref}><Collecting /></div>;
-  }
-  if (visible.length === 0) {
+  if (drawn.length === 0) {
+    const anything = BANDS.some((b) => show[b.key]) || show.total;
     return (
       <div ref={ref} style={{ height: H, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span className="muted">Every priority is hidden. Turn one back on.</span>
+        {anything ? <Collecting /> : <span className="muted">Nothing selected. Turn a line back on.</span>}
       </div>
     );
   }
-
-  const n = data.length;
 
   return (
     <div ref={ref}>
       <svg className="chart" viewBox={`0 0 ${g.w} ${H}`} width={g.w} height={H} role="img">
         <Axes g={g} max={max} format={(v) => String(Math.round(v))} />
-        {visible.map((b) => {
-          const pts = data.map((p, i) => `${g.x(i, n)},${g.y(p[b.key])}`).join(" ");
-          const last = data[n - 1][b.key];
+        {drawn.map((l) => {
+          const n = l.points.length;
+          const line = l.points.map((p, i) => `${g.x(i, n)},${g.y(p.v)}`).join(" ");
           return (
-            <g key={b.key}>
+            <g key={l.key}>
               <polyline
-                points={pts} fill="none" stroke={b.color} strokeWidth={2.25}
+                points={line} fill="none" stroke={l.color}
+                strokeWidth={l.key === "total" ? 2.75 : 2.25}
+                strokeDasharray={l.key === "total" ? "6 4" : undefined}
                 strokeLinejoin="round" strokeLinecap="round"
               />
-              <circle cx={g.x(n - 1, n)} cy={g.y(last)} r={3.5} fill={b.color} />
+              <circle cx={g.x(n - 1, n)} cy={g.y(l.points[n - 1].v)} r={3.5} fill={l.color} />
             </g>
           );
         })}
-        <XAxis g={g} count={n} />
+        <XAxis g={g} points={drawn[0].points} />
       </svg>
     </div>
   );
 }
 
 function LineArea({
-  data, color, format = (v: number) => String(Math.round(v)),
+  points, color, format = (v: number) => String(Math.round(v)),
 }: {
-  data: number[]; color: string; format?: (v: number) => string;
+  points: SeriesPoint[]; color: string; format?: (v: number) => string;
 }) {
   const { ref, width } = useWidth<HTMLDivElement>();
-  if (data.length < 2) {
+  if (points.length < 2) {
     return <div ref={ref}><Collecting /></div>;
   }
 
-  const max = niceMax(Math.max(...data));
+  const max = niceMax(Math.max(...points.map((p) => p.v)));
   const g = geometry(width, max);
-  const n = data.length;
+  const n = points.length;
 
-  const line = data.map((v, i) => `${g.x(i, n)},${g.y(v)}`).join(" ");
+  const line = points.map((p, i) => `${g.x(i, n)},${g.y(p.v)}`).join(" ");
   const floor = PAD.top + g.ph;
   const fill = `${PAD.left},${floor} ${line} ${PAD.left + g.pw},${floor}`;
   const id = `fill-${color.replace(/[^a-z]/gi, "")}`;
@@ -390,20 +479,22 @@ function LineArea({
       <svg className="chart" viewBox={`0 0 ${g.w} ${H}`} width={g.w} height={H} role="img">
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
         </defs>
         <Axes g={g} max={max} format={format} />
         <polygon points={fill} fill={`url(#${id})`} />
         <polyline points={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={g.x(n - 1, n)} cy={g.y(data[n - 1])} r={3.5} fill={color} />
-        <XAxis g={g} count={n} />
+        <circle cx={g.x(n - 1, n)} cy={g.y(points[n - 1].v)} r={3.5} fill={color} />
+        <XAxis g={g} points={points} />
       </svg>
     </div>
   );
 }
 
+// Samples are a fixed interval apart, so the axis is labelled from the count
+// without carrying timestamps into the chart.
 export default function Metrics() {
   return (
     <Suspense fallback={<p className="muted">Loading…</p>}>

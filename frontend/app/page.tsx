@@ -69,7 +69,7 @@ export default function Queues() {
               <th className="num">Ready</th>
               <th className="num">In flight</th>
               <th className="num">Oldest</th>
-              <th>Owner</th>
+              <th>Owner node</th>
               <th>State</th>
             </tr>
           </thead>

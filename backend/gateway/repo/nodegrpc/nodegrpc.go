@@ -53,6 +53,25 @@ func (r *Repo) client(addr string) (pb.QueueServiceClient, error) {
 	return pb.NewQueueServiceClient(c), nil
 }
 
+// failed maps the error and, when the transport is the thing that broke, drops
+// the cached connection.
+//
+// A restarted container usually comes back on a new IP. The cached connection
+// still points at the old one, and gRPC's DNS resolver will not look again for
+// up to thirty seconds, so every call to a node that has just come back fails
+// until it does. Dropping the connection here means the next call dials fresh.
+func (r *Repo) failed(addr string, err error) error {
+	if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
+		r.mu.Lock()
+		if c, held := r.conns[addr]; held {
+			delete(r.conns, addr)
+			_ = c.Close()
+		}
+		r.mu.Unlock()
+	}
+	return fromStatus(err)
+}
+
 // fromStatus maps gRPC codes back onto the gateway's error codes.
 func fromStatus(err error) error {
 	if err == nil {
@@ -126,7 +145,7 @@ func (r *Repo) Enqueue(ctx context.Context, addr string, in entity.NodeEnqueue) 
 	}
 	out, err := c.Enqueue(ctx, req)
 	if err != nil {
-		return entity.NodeEnqueueResult{}, fromStatus(err)
+		return entity.NodeEnqueueResult{}, r.failed(addr, err)
 	}
 	return entity.NodeEnqueueResult{MessageID: out.MessageId, Slot: uint16(out.Slot), Seq: out.Seq}, nil
 }
@@ -138,7 +157,7 @@ func (r *Repo) Dequeue(ctx context.Context, addr string, spec entity.QueueSpec, 
 	}
 	out, err := c.Dequeue(ctx, &pb.DequeueRequest{Spec: specTo(spec), MaxMessages: int32(max)})
 	if err != nil {
-		return nil, fromStatus(err)
+		return nil, r.failed(addr, err)
 	}
 	msgs := make([]entity.NodeMessage, 0, len(out.Messages))
 	for _, m := range out.Messages {
@@ -157,7 +176,7 @@ func (r *Repo) Ack(ctx context.Context, addr string, spec entity.QueueSpec, rece
 		return err
 	}
 	_, err = c.Ack(ctx, &pb.AckRequest{Spec: specTo(spec), Receipt: receipt})
-	return fromStatus(err)
+	return r.failed(addr, err)
 }
 
 func (r *Repo) Nack(ctx context.Context, addr string, spec entity.QueueSpec, receipt string, delay time.Duration) error {
@@ -166,7 +185,7 @@ func (r *Repo) Nack(ctx context.Context, addr string, spec entity.QueueSpec, rec
 		return err
 	}
 	_, err = c.Nack(ctx, &pb.NackRequest{Spec: specTo(spec), Receipt: receipt, DelayNs: int64(delay)})
-	return fromStatus(err)
+	return r.failed(addr, err)
 }
 
 func (r *Repo) Stats(ctx context.Context, addr string, spec entity.QueueSpec) (entity.NodeStats, error) {
@@ -176,7 +195,7 @@ func (r *Repo) Stats(ctx context.Context, addr string, spec entity.QueueSpec) (e
 	}
 	out, err := c.Stats(ctx, &pb.StatsRequest{Spec: specTo(spec)})
 	if err != nil {
-		return entity.NodeStats{}, fromStatus(err)
+		return entity.NodeStats{}, r.failed(addr, err)
 	}
 	return statsFrom(out), nil
 }
@@ -188,7 +207,7 @@ func (r *Repo) StatsAll(ctx context.Context, addr string) (string, []entity.Node
 	}
 	out, err := c.StatsAll(ctx, &pb.Empty{})
 	if err != nil {
-		return "", nil, fromStatus(err)
+		return "", nil, r.failed(addr, err)
 	}
 	stats := make([]entity.NodeStats, 0, len(out.Queues))
 	for _, q := range out.Queues {
@@ -203,7 +222,7 @@ func (r *Repo) Drop(ctx context.Context, addr string, spec entity.QueueSpec) err
 		return err
 	}
 	_, err = c.Drop(ctx, &pb.StatsRequest{Spec: specTo(spec)})
-	return fromStatus(err)
+	return r.failed(addr, err)
 }
 
 func (r *Repo) Freeze(ctx context.Context, addr string, spec entity.QueueSpec, slots []uint16) (entity.Transfer, error) {
@@ -217,7 +236,7 @@ func (r *Repo) Freeze(ctx context.Context, addr string, spec entity.QueueSpec, s
 	}
 	out, err := c.Freeze(ctx, &pb.FreezeRequest{Spec: specTo(spec), Slots: only})
 	if err != nil {
-		return entity.Transfer{}, fromStatus(err)
+		return entity.Transfer{}, r.failed(addr, err)
 	}
 	t := entity.Transfer{Spec: spec, BySlot: map[uint16][]entity.WireMessage{}}
 	for slot, sm := range out.BySlot {
@@ -244,7 +263,7 @@ func (r *Repo) Absorb(ctx context.Context, addr string, t entity.Transfer) error
 		req.BySlot[uint32(slot)] = sm
 	}
 	_, err = c.Absorb(ctx, req)
-	return fromStatus(err)
+	return r.failed(addr, err)
 }
 
 // Subscribe opens the notification stream. It stays open until the context
@@ -257,7 +276,7 @@ func (r *Repo) Subscribe(ctx context.Context, addr, gatewayID string) (<-chan en
 	}
 	stream, err := c.Subscribe(ctx, &pb.SubscribeRequest{GatewayId: gatewayID})
 	if err != nil {
-		return nil, fromStatus(err)
+		return nil, r.failed(addr, err)
 	}
 	out := make(chan entity.WorkAvailable, 64)
 	go func() {

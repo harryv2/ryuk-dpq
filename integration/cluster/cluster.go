@@ -16,12 +16,13 @@ import (
 )
 
 type Cluster struct {
-	dir     string // the directory holding docker-compose.yml
-	project string
-	port    string
-	dataDir string
-	BaseURL string
-	verbose bool
+	dir      string // the directory holding docker-compose.yml
+	project  string
+	port     string
+	promPort string
+	dataDir  string
+	BaseURL  string
+	verbose  bool
 }
 
 // New locates the compose file by walking up from the working directory, so the
@@ -33,12 +34,13 @@ func New() (*Cluster, error) {
 	}
 	port := envOr("RYUK_IT_PORT", "8091")
 	return &Cluster{
-		dir:     dir,
-		project: envOr("RYUK_IT_PROJECT", "ryuk-it"),
-		port:    port,
-		dataDir: envOr("RYUK_IT_DATA", "../data-it"),
-		BaseURL: envOr("RYUK_BASE_URL", "http://localhost:"+port),
-		verbose: os.Getenv("RYUK_IT_VERBOSE") != "",
+		dir:      dir,
+		project:  envOr("RYUK_IT_PROJECT", "ryuk-it"),
+		port:     port,
+		promPort: envOr("RYUK_IT_PROM_PORT", "9092"),
+		dataDir:  envOr("RYUK_IT_DATA", "../data-it"),
+		BaseURL:  envOr("RYUK_BASE_URL", "http://localhost:"+port),
+		verbose:  os.Getenv("RYUK_IT_VERBOSE") != "",
 	}, nil
 }
 
@@ -74,6 +76,7 @@ func (c *Cluster) env() []string {
 	return append(os.Environ(),
 		"COMPOSE_PROJECT_NAME="+c.project,
 		"RYUK_PORT="+c.port,
+		"RYUK_PROM_PORT="+c.promPort,
 		"RYUK_DATA="+c.dataDir,
 	)
 }
