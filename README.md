@@ -21,7 +21,24 @@ tracks each message from submission to completion, and reports metrics.
 
 https://github.com/user-attachments/assets/56e27257-cc04-4d23-9bc4-b0747777d76a
 
+A 3m 10s walkthrough against a live cluster:
 
+| | |
+|---|---|
+| 0:06 | the cluster, and where queues sit on it |
+| 0:14 | creating a queue, settings explained |
+| 0:25 | sending four: two HIGH, one MEDIUM, one LOW |
+| 0:32 | polling one at a time — priority order, ack, nack, redelivery |
+| 1:00 | **delayed delivery** — a message scheduled for later, held back until its time |
+| 1:24 | **metrics under real load** — a backlog builds past six hundred, then drains |
+| 2:03 | distributed queues and slot placement |
+| 2:14 | scaling four nodes to six, and the rebalance |
+| 2:28 | losing a machine — only its slots go |
+| 2:46 | tenancy and theme |
+
+Also at [`docs/demo/ryuk-demo-compressed.mp4`](docs/demo/ryuk-demo-compressed.mp4)
+(7.5 MB). The [HyperFrames source](docs/demo/composition) and the capture scripts
+rebuild it; see [`docs/demo/VIDEO.md`](docs/demo/VIDEO.md).
 
 ## Architecture
 

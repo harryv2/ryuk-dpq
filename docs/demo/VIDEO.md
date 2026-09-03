@@ -26,6 +26,7 @@ Three scripts run in order, each continuing the frame numbering of the last:
 | `capture.js` | 001–017 | cluster, create, send four, poll through ack and nack |
 | `capture-metrics.js` | 018–041 | the metrics page photographed every 5s while traffic runs |
 | `capture-cluster.js` | 042–063 | distribution, scaling to six, killing a node, tenancy |
+| `capture-delayed.js` | 064–070 | a scheduled message held back, then released on time |
 
 They drive real Chrome through Playwright, clicking the way a person would. Two things matter:
 
@@ -42,6 +43,7 @@ npm i playwright-core
 node capture.js composition/assets
 node capture-metrics.js composition/assets
 node capture-cluster.js composition/assets
+node capture-delayed.js composition/assets
 ```
 
 ### The scenario

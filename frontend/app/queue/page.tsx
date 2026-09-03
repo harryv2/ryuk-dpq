@@ -113,7 +113,9 @@ function SendPanel({
 }: {
   queue: string; token: string; onSent: () => void; onError: (s: string) => void;
 }) {
-  const [f, setF] = useState({ payload: "", priority: "HIGH", groupId: "", count: 1, ttl: "" });
+  const [f, setF] = useState({
+    payload: "", priority: "HIGH", groupId: "", count: 1, ttl: "", deliverAfter: "",
+  });
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState<Sent[]>([]);
 
@@ -132,6 +134,7 @@ function SendPanel({
           priority: f.priority,
           groupId: f.groupId || undefined,
           ttl: f.ttl || undefined,
+          deliverAfter: f.deliverAfter || undefined,
         });
         just.push({
           id: res?.messageId ?? "",
@@ -187,12 +190,21 @@ function SendPanel({
               onChange={(e) => set("count", Math.max(1, Number(e.target.value) || 1))}
             />
           </label>
+          <label>
+            <span>Deliver after</span>
+            <input
+              value={f.deliverAfter}
+              onChange={(e) => set("deliverAfter", e.target.value)}
+              placeholder="e.g. 30s"
+            />
+          </label>
         </div>
 
         <p className="field-hint" style={{ marginTop: -4 }}>
           Messages sharing a group are delivered one at a time, in order. Leave it
-          empty and the queue is free to hand out messages in parallel. Sending
-          several copies numbers them, so the order they come back in is visible.
+          empty and the queue is free to hand out messages in parallel. A message
+          with a delivery time is held back and counted as delayed until it
+          arrives &mdash; nothing can take it before then.
         </p>
 
         <div className="row" style={{ marginTop: 16 }}>

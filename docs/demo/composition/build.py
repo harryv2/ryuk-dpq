@@ -33,7 +33,16 @@ SCENES = [
     ("shot",    2.6, "016_poll_low.png", "THEN LOW", "LOW last &mdash; strict priority, FIFO inside each band"),
     ("shot",    2.6, "017_drained.png", "DRAINED", "Four in, four out, one of them twice because it was nacked"),
 
-    ("div",     2.2, "PART 5", "Metrics, live", None),
+    ("div",     1.9, "PART 5", "Scheduling for later", None),
+    ("shot",    2.8, "064_delay_form.png", "DELIVER AFTER", "A message can carry a delivery time &mdash; twenty-five seconds here, but it is the same mechanism as a retry backoff"),
+    ("shot",    3.2, "065_delay_sent.png", "HELD BACK", "Two sent, one ready and one delayed. The delayed one is counted separately, not as depth"),
+    ("shot",    3.0, "066_delay_held_back.png", "ONLY THE OTHER", "A poll takes the message that is due and leaves the scheduled one alone"),
+    ("shot",    3.0, "067_delay_only_delayed.png", "STILL WAITING", "The immediate one acknowledged. Ready is 0, delayed is still 1"),
+    ("shot",    3.2, "068_delay_nothing_yet.png", "NOT YET", "Polling again takes nothing &mdash; no consumer can reach it before its time"),
+    ("shot",    3.4, "069_delay_released.png", "RELEASED", "Its moment arrives and the sweeper moves it across: delayed 1 &rarr; 0, ready 0 &rarr; 1"),
+    ("shot",    3.4, "070_delay_arrived.png", "DELIVERED", "Now it comes out, on its first attempt, having waited exactly as long as it was told to"),
+
+    ("div",     2.2, "PART 6", "Metrics, live", None),
     ("shot",    3.0, "018_metrics_quiet.png", "AT REST", "Prometheus scrapes the gateway, so the history survives a reload and reaches back further than this tab has been open"),
 ]
 
@@ -71,12 +80,12 @@ SCENES += [
     ("shot",    2.8, "040_metrics_filtered.png", "FILTER", "Hiding a band rescales the axis, so a small series is not flattened by a large one"),
     ("shot",    2.8, "041_metrics_window.png", "WINDOW", "Five minutes, an hour, six, a day &mdash; served from stored history, not from this tab"),
 
-    ("div",     1.9, "PART 6", "Distributed queues", None),
+    ("div",     1.9, "PART 7", "Distributed queues", None),
     ("shot",    2.8, "042_events_queue.png", "SPREAD", "Slots placed independently, so counts are a point-in-time sum rather than an exact figure"),
     ("shot",    2.8, "043_events_metrics.png", "SUMMED", "Every machine holding a slot is asked, and the answers added up"),
     ("shot",    3.2, "044_placement.png", "SIXTY-FOUR SLOTS", "Spread over four nodes. The bar is how much of the queue each one holds"),
 
-    ("div",     1.9, "PART 7", "Adding machines", None),
+    ("div",     1.9, "PART 8", "Adding machines", None),
     ("shot",    2.2, "045_scaling_00.png", "SCALE TO SIX", "docker compose up --scale node=6. Nodes register themselves; nothing is told about them"),
     ("shot",    1.0, "046_scaling_01.png", "", ""),
     ("shot",    1.0, "047_scaling_02.png", "", ""),
@@ -86,7 +95,7 @@ SCENES += [
     ("shot",    1.0, "051_scaling_06.png", "", ""),
     ("shot",    3.4, "052_scaling_07.png", "SIX NODES", "The slots moved onto the new machines. Freeze, ship, absorb &mdash; no message lost, no order broken"),
 
-    ("div",     1.9, "PART 8", "Losing a machine", None),
+    ("div",     1.9, "PART 9", "Losing a machine", None),
     ("shot",    2.4, "053_node_down_00.png", "DOCKER STOP", "One container killed outright"),
     ("shot",    1.2, "054_node_down_01.png", "", ""),
     ("shot",    1.2, "055_node_down_02.png", "", ""),
@@ -94,7 +103,7 @@ SCENES += [
     ("shot",    3.4, "057_events_degraded.png", "HONEST COUNTS", "The stats say how many slots are unreachable rather than reporting a smaller queue"),
     ("shot",    3.4, "058_node_back.png", "AND BACK", "Restarted, it replays its log, re-registers, and its slots are whole again"),
 
-    ("div",     1.9, "PART 9", "Tenancy and theme", None),
+    ("div",     1.9, "PART 10", "Tenancy and theme", None),
     ("shot",    2.2, "059_acme.png", "ACME", "Everything so far belongs to one org"),
     ("shot",    3.0, "060_globex.png", "GLOBEX", "The org comes from the credential, never the URL &mdash; another tenant sees none of it"),
     ("shot",    1.8, "061_dark_queues.png", "DARK", "Light and dark, remembered per browser"),
