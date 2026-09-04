@@ -4,10 +4,10 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useOrg } from "@/lib/org-context";
-import { api, decodePayload, priorityLabel, Message, QueueStats } from "@/lib/api";
-import { Busy, Empty, StatCard, age } from "@/lib/ui";
+import { api, decodePayload, priorityLabel, Message, QueueStats, QueueSummary } from "@/lib/api";
+import { Busy, Empty, Skeleton, StatCard, age } from "@/lib/ui";
 
-type Tab = "send" | "poll";
+type Tab = "send" | "poll" | "details";
 
 type Sent = { id: string; payload: string; priority: number; groupId: string; at: number };
 
@@ -92,16 +92,21 @@ function QueueDetailInner() {
           Poll
           {held.length > 0 && <span className="count">{held.length}</span>}
         </button>
+        <button data-active={tab === "details"} onClick={() => setTab("details")}>Details</button>
       </div>
 
       <div className="fade-in" key={tab}>
-        {tab === "send" ? (
+        {tab === "send" && (
           <SendPanel queue={name} token={org.token} onSent={refresh} onError={setErr} />
-        ) : (
+        )}
+        {tab === "poll" && (
           <PollPanel
             queue={name} token={org.token} held={held} setHeld={setHeld}
             onChange={refresh} onError={setErr}
           />
+        )}
+        {tab === "details" && (
+          <DetailsPanel queue={name} token={org.token} onError={setErr} />
         )}
       </div>
     </>
@@ -412,5 +417,193 @@ export default function QueueDetail() {
     <Suspense fallback={<p className="muted">Loading…</p>}>
       <QueueDetailInner />
     </Suspense>
+  );
+}
+
+// Durations cross the wire as Go nanoseconds; the API takes them back as
+// strings like "30s", which is also what someone would type.
+function fmtDur(ns: number): string {
+  if (!ns) return "";
+  const s = Math.round(ns / 1e9);
+  if (s % 3600 === 0) return `${s / 3600}h`;
+  if (s % 60 === 0) return `${s / 60}m`;
+  return `${s}s`;
+}
+
+type Form = {
+  visibilityTimeout: string;
+  maxRetries: number;
+  defaultTtl: string;
+  starvationThreshold: string;
+  starvationReserve: number;
+  maxDepth: number;
+  deadLetterQueue: string;
+};
+
+function formOf(q: QueueSummary): Form {
+  return {
+    visibilityTimeout: fmtDur(q.settings.visibilityTimeout),
+    maxRetries: q.settings.maxRetries,
+    defaultTtl: fmtDur(q.settings.defaultTtl),
+    starvationThreshold: fmtDur(q.settings.starvationThreshold),
+    starvationReserve: q.settings.starvationReserve,
+    maxDepth: q.settings.maxDepth,
+    deadLetterQueue: q.settings.deadLetterQueue ?? "",
+  };
+}
+
+function DetailsPanel({
+  queue, token, onError,
+}: {
+  queue: string; token: string; onError: (s: string) => void;
+}) {
+  const [all, setAll] = useState<QueueSummary[]>([]);
+  const [f, setF] = useState<Form | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const q = all.find((x) => x.name === queue);
+
+  const load = useCallback(async () => {
+    const list = await api.listQueues(token);
+    setAll(list);
+    const me = list.find((x) => x.name === queue);
+    if (me) setF(formOf(me));
+  }, [token, queue]);
+
+  useEffect(() => {
+    load().catch((e) => onError(e.message));
+  }, [load, onError]);
+
+  const set = (k: keyof Form, v: unknown) => f && setF({ ...f, [k]: v });
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      await api.updateQueue(token, queue, {
+        visibilityTimeout: f.visibilityTimeout || undefined,
+        maxRetries: Number(f.maxRetries),
+        defaultTtl: f.defaultTtl || undefined,
+        starvationThreshold: f.starvationThreshold || undefined,
+        starvationReserve: Number(f.starvationReserve),
+        maxDepth: Number(f.maxDepth),
+        deadLetterQueue: f.deadLetterQueue || undefined,
+      });
+      await load();
+      setSaved(true);
+    } catch (e: any) {
+      onError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!q || !f) return <div className="card"><Skeleton h={16} /></div>;
+
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <div className="card-head">
+          <h2>Placement</h2>
+          <span className={q.distributed ? "tag dist" : "tag plain"}>
+            {q.distributed ? "distributed" : "single node"}
+          </span>
+        </div>
+        <table className="kv">
+          <tbody>
+            <tr>
+              <td>Slots</td>
+              <td className="mono">{q.distributed ? 64 : 16}</td>
+            </tr>
+            {q.distributed && (
+              <tr>
+                <td>Machines it may use</td>
+                <td className="mono">{q.placementWidth ?? "all"}</td>
+              </tr>
+            )}
+            <tr>
+              <td>Owner node</td>
+              <td className="mono">{q.ownerNode || "per slot"}</td>
+            </tr>
+            <tr>
+              <td>State</td>
+              <td className="mono">{q.state}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="field-hint" style={{ marginTop: 12 }}>
+          Fixed at creation. The slot count decides which slot a group lives in, so
+          changing it would send a group&rsquo;s later messages somewhere else.
+        </p>
+      </div>
+
+      <form className="card" onSubmit={save}>
+        <div className="card-head">
+          <h2>Settings</h2>
+          {saved && <span className="tag ok">saved</span>}
+        </div>
+
+        <div className="grid cols-2">
+          <label>
+            <span>Visibility timeout</span>
+            <input value={f.visibilityTimeout} onChange={(e) => set("visibilityTimeout", e.target.value)} />
+            <p className="field-hint">Applies to the next delivery. Messages already in flight keep the deadline they were given.</p>
+          </label>
+          <label>
+            <span>Max retries</span>
+            <input type="number" min={1} value={f.maxRetries}
+              onChange={(e) => set("maxRetries", e.target.value)} />
+            <p className="field-hint">Read when a delivery fails, so it applies to messages already handed out. Lowering it can dead-letter them on their next failure.</p>
+          </label>
+          <label>
+            <span>Default TTL</span>
+            <input value={f.defaultTtl} onChange={(e) => set("defaultTtl", e.target.value)} />
+            <p className="field-hint">Stamped at enqueue. Messages already queued keep the expiry they were given.</p>
+          </label>
+          <label>
+            <span>Starvation threshold</span>
+            <input value={f.starvationThreshold} onChange={(e) => set("starvationThreshold", e.target.value)} />
+            <p className="field-hint">Takes effect on the next poll, for everything in the queue.</p>
+          </label>
+          <label>
+            <span>Starvation reserve</span>
+            <input type="number" step="0.05" min={0} max={0.95} value={f.starvationReserve}
+              onChange={(e) => set("starvationReserve", e.target.value)} />
+          </label>
+          <label>
+            <span>Max depth</span>
+            <input type="number" min={0} value={f.maxDepth}
+              onChange={(e) => set("maxDepth", e.target.value)} />
+            <p className="field-hint">0 is unlimited. Below the current depth, new sends are refused until it drains; nothing is discarded.</p>
+          </label>
+        </div>
+
+        <label>
+          <span>Dead-letter queue</span>
+          <select value={f.deadLetterQueue} onChange={(e) => set("deadLetterQueue", e.target.value)}>
+            <option value="">None</option>
+            {all.filter((x) => x.name !== queue).map((x) => (
+              <option key={x.name} value={x.name}>{x.name}</option>
+            ))}
+          </select>
+          <p className="field-hint">Redirects future dead letters. Ones already sent stay where they went.</p>
+        </label>
+
+        <p className="note">
+          A change reaches the nodes on their next request, because the settings
+          travel with every one. Nothing already queued is rewritten.
+        </p>
+
+        <div className="row" style={{ marginTop: 16 }}>
+          <button className="primary" disabled={saving}>
+            {saving ? <Busy label="Saving…" /> : "Save settings"}
+          </button>
+          <button type="button" className="ghost" onClick={() => setF(formOf(q))}>Reset</button>
+        </div>
+      </form>
+    </div>
   );
 }

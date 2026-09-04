@@ -1,6 +1,9 @@
 package entity
 
-import "hash/fnv"
+import (
+	"hash/fnv"
+	"sort"
+)
 
 // Member is a live node. The id is stable across restarts because it lives with
 // the node's data; the address is not, because a container gets a new hostname
@@ -8,6 +11,29 @@ import "hash/fnv"
 type Member struct {
 	ID   string `json:"id"`
 	Addr string `json:"addr"`
+}
+
+// CandidatesFor is the set of machines a queue may use: the top `width` of the
+// same ranking OwnerFor picks its winner from. Bounding it is shuffle sharding
+// -- two queues of width 4 on twenty nodes share 0.8 machines on average, so a
+// hot queue is felt by a few neighbours rather than by everyone. A width past
+// the cluster size is the cluster size.
+func CandidatesFor(key string, members []Member, width int) []Member {
+	if width <= 0 || width >= len(members) {
+		return members
+	}
+	ranked := make([]Member, len(members))
+	copy(ranked, members)
+
+	kh := hash64(key)
+	sort.Slice(ranked, func(i, j int) bool {
+		si, sj := mix(kh, hash64(ranked[i].ID)), mix(kh, hash64(ranked[j].ID))
+		if si != sj {
+			return si > sj
+		}
+		return ranked[i].ID < ranked[j].ID // stable when scores tie
+	})
+	return ranked[:width]
 }
 
 // OwnerFor is rendezvous hashing: the member scoring highest wins, so every

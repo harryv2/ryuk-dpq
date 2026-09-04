@@ -47,6 +47,12 @@ func (d *deque[T]) front() (T, bool) {
 
 func (d *deque[T]) at(i int) T { return d.buf[d.head+i] }
 
+func (d *deque[T]) all() []T {
+	out := make([]T, d.len())
+	copy(out, d.buf[d.head:])
+	return out
+}
+
 func (d *deque[T]) prepend(vs []T) {
 	if len(vs) == 0 {
 		return

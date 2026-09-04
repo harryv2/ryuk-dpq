@@ -65,8 +65,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		return ctx, nil
 	})
 
-	// ---- creating queues ----
-
 	sc.Step(`^I (?:have )?create[d]? a queue$`, func(ctx context.Context) error {
 		w.err = w.acme().CreateQueue(ctx, client.CreateQueue{Name: w.queue})
 		return w.err
@@ -76,6 +74,14 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		w.err = w.acme().CreateQueue(ctx, client.CreateQueue{Name: w.queue, Distributed: true})
 		return w.err
 	})
+
+	sc.Step(`^I (?:have )?create[d]? a distributed queue spread over (\d+) machines$`,
+		func(ctx context.Context, width int) error {
+			w.err = w.acme().CreateQueue(ctx, client.CreateQueue{
+				Name: w.queue, Distributed: true, PlacementWidth: width,
+			})
+			return w.err
+		})
 
 	sc.Step(`^I (?:have )?create[d]? a queue as "([^"]*)"$`, func(ctx context.Context, org string) error {
 		w.err = w.c(org).CreateQueue(ctx, client.CreateQueue{Name: w.queue})
@@ -150,8 +156,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		return w.err
 	})
 
-	// ---- outcomes of a request ----
-
 	sc.Step(`^the request succeeds$`, func() error {
 		if w.err != nil {
 			return fmt.Errorf("expected success, got %v", w.err)
@@ -219,8 +223,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		return nil
 	})
 
-	// ---- sending ----
-
 	sc.Step(`^I send these messages:$`, func(ctx context.Context, table *godog.Table) error {
 		head := headings(table)
 		for _, row := range table.Rows[1:] {
@@ -274,8 +276,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		})
 		return err
 	})
-
-	// ---- taking ----
 
 	sc.Step(`^I drain the queue$`, func(ctx context.Context) error {
 		got, err := w.acme().DrainAll(ctx, w.queue, 500)
@@ -349,8 +349,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		time.Sleep(time.Duration(s) * time.Second)
 		return nil
 	})
-
-	// ---- assertions on what came back ----
 
 	sc.Step(`^the delivery order is "([^"]*)"$`, func(want string) error {
 		var got []string
@@ -480,8 +478,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		return fmt.Errorf("the delayed message never arrived")
 	})
 
-	// ---- assertions on stats ----
-
 	sc.Step(`^the queue reports (\d+) ready messages?$`, func(ctx context.Context, n int) error {
 		return eventually(20*time.Second, func() error {
 			s, err := w.acme().Stats(ctx, w.queue)
@@ -591,8 +587,6 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		})
 	})
 
-	// ---- placement ----
-
 	sc.Step(`^its slots are spread over more than one node$`, func(ctx context.Context) error {
 		return eventually(20*time.Second, func() error {
 			holders, _, err := w.placement(ctx)
@@ -627,7 +621,13 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			return err
 		}
 		w.before = len(holders)
-		return stack.Scale(ctx, *nodes+extra)
+		// Relative to the cluster as it is now, not to the size the suite
+		// started with: an earlier scenario may already have scaled it up.
+		members, err := w.acme().Cluster(ctx)
+		if err != nil {
+			return err
+		}
+		return stack.Scale(ctx, len(members)+extra)
 	})
 
 	sc.Step(`^the queue's slots spread onto the new nodes$`, func(ctx context.Context) error {
@@ -641,6 +641,49 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			}
 			return nil
 		})
+	})
+
+	// A migration is only safe if the messages arrive with it. Draining is
+	// retried because a slot in flight between two owners is briefly empty.
+	sc.Step(`^all (\d+) messages can still be drained$`, func(ctx context.Context, want int) error {
+		seen := map[string]bool{}
+		err := eventually(90*time.Second, func() error {
+			batch, err := w.acme().Dequeue(ctx, w.queue, 10)
+			if err != nil {
+				return err
+			}
+			for _, m := range batch {
+				if seen[m.MessageID] {
+					return fmt.Errorf("message %s was delivered twice", m.MessageID)
+				}
+				seen[m.MessageID] = true
+				if err := w.acme().Ack(ctx, w.queue, m.Receipt); err != nil {
+					return err
+				}
+			}
+			if len(seen) < want {
+				return fmt.Errorf("drained %d of %d", len(seen), want)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if len(seen) != want {
+			return fmt.Errorf("drained %d, want %d", len(seen), want)
+		}
+		return nil
+	})
+
+	sc.Step(`^the queue is on at most (\d+) nodes$`, func(ctx context.Context, want int) error {
+		holders, _, err := w.placement(ctx)
+		if err != nil {
+			return err
+		}
+		if len(holders) > want {
+			return fmt.Errorf("the queue is on %d nodes, want at most %d", len(holders), want)
+		}
+		return nil
 	})
 
 	sc.Step(`^a node holding some of its slots goes down$`, func(ctx context.Context) error {

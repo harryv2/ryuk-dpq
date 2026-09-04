@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// Code is what a controller maps to a status.
 type Code string
 
 const (

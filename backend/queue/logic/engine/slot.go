@@ -39,6 +39,11 @@ type slot struct {
 	// read without the lock by the dispatcher
 	hint    atomic.Uint32 // highest non-empty band + 1, 0 means empty
 	headSeq atomic.Uint64
+
+	// A slot being handed to another node stops changing: no delivery, no
+	// enqueue, no timers. Its messages have been snapshotted, and anything that
+	// mutated them afterwards would be left behind when the slot is dropped.
+	frozen atomic.Bool
 }
 
 func newSlot(id uint16) *slot {

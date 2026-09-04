@@ -46,7 +46,9 @@ type EnqueueOptions struct {
 }
 
 type Queue struct {
-	cfg     Config
+	// Settings can change while the queue is running and are read on the
+	// delivery path, so they are swapped whole rather than field by field.
+	conf    atomic.Pointer[Config]
 	clock   Clock
 	cluster Cluster
 	journal Journal
@@ -79,7 +81,6 @@ func New(cfg Config, clk Clock, cl Cluster, j Journal, generation uint64) *Queue
 		j = NoopJournal{}
 	}
 	q := &Queue{
-		cfg:         cfg,
 		clock:       clk,
 		cluster:     cl,
 		journal:     j,
@@ -87,18 +88,39 @@ func New(cfg Config, clk Clock, cl Cluster, j Journal, generation uint64) *Queue
 		generation:  generation,
 		incarnation: j.Incarnation(),
 	}
+	q.conf.Store(&cfg)
 	empty := []*slot{}
 	q.localView.Store(&empty)
 	return q
 }
 
-func (q *Queue) Config() Config      { return q.cfg }
+func (q *Queue) cfg() *Config        { return q.conf.Load() }
+func (q *Queue) Config() Config      { return *q.conf.Load() }
 func (q *Queue) Generation() uint64  { return q.generation }
 func (q *Queue) Incarnation() uint64 { return q.incarnation }
 
+// Reconfigure swaps the settings of a running queue. The key and the slot count
+// are not settings: they decide which slot a group lives in, so changing them
+// would send a group's later messages elsewhere.
+//
+// Nothing queued is rewritten, so when a change takes effect depends on where
+// the value is read: the visibility timeout applies from the next delivery, the
+// retry limit to messages already delivered. It reports whether anything moved,
+// because only the engine knows what a blank field defaults to.
+func (q *Queue) Reconfigure(c Config) bool {
+	cur := q.conf.Load()
+	c.Key, c.Distributed = cur.Key, cur.Distributed
+	c.applyDefaults()
+	if c == *cur {
+		return false
+	}
+	q.conf.Store(&c)
+	return true
+}
+
 // slotCount is the queue's shape. Fixed for its life, because a group key has
 // to keep resolving to the same slot.
-func (q *Queue) slotCount() int { return SlotCountFor(q.cfg.Distributed) }
+func (q *Queue) slotCount() int { return SlotCountFor(q.cfg().Distributed) }
 
 // nextSeq prefixes the counter with the ownership generation, so two owners
 // never hand out overlapping values and an older owner's messages sort first.
@@ -126,7 +148,7 @@ func (q *Queue) slot(id uint16) *slot {
 
 // caller holds slotsMu for write
 func (q *Queue) rebuildLocalView() {
-	ids := q.cluster.LocalSlots(q.cfg.Key, q.slotCount())
+	ids := q.cluster.LocalSlots(q.cfg().Key, q.slotCount())
 	view := make([]*slot, 0, len(ids))
 	for _, id := range ids {
 		if s := q.slots[id]; s != nil {
@@ -157,9 +179,9 @@ func (q *Queue) SlotFor(groupID string) uint16 { return q.slotFor(groupID) }
 
 func (q *Queue) slotFor(groupID string) uint16 {
 	if groupID != "" {
-		return q.cluster.SlotFor(q.cfg.Key, groupID, q.slotCount())
+		return q.cluster.SlotFor(q.cfg().Key, groupID, q.slotCount())
 	}
-	local := q.cluster.LocalSlots(q.cfg.Key, q.slotCount())
+	local := q.cluster.LocalSlots(q.cfg().Key, q.slotCount())
 	if len(local) == 0 {
 		return 0
 	}
@@ -182,14 +204,14 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	if !o.Priority.Valid() {
 		return nil, ErrBadPriority
 	}
-	if q.cfg.MaxDepth > 0 && q.depth.Load() >= q.cfg.MaxDepth {
+	if q.cfg().MaxDepth > 0 && q.depth.Load() >= q.cfg().MaxDepth {
 		return nil, ErrQueueFull
 	}
 
 	now := q.clock.Now()
 	ttl := o.TTL
 	if ttl == 0 {
-		ttl = q.cfg.DefaultTTL
+		ttl = q.cfg().DefaultTTL
 	}
 
 	m := &Message{
@@ -207,6 +229,11 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	}
 
 	s := q.slot(slotID)
+	if s.frozen.Load() {
+		// Being handed to another node. The caller re-reads placement and
+		// retries, so the message lands wherever the slot ends up.
+		return nil, ErrFrozen
+	}
 	s.mu.Lock()
 	// Assigned under the lock: it is what orders two concurrent producers, so
 	// the number and the list position have to be decided together.
@@ -245,7 +272,7 @@ func (q *Queue) Nack(r Receipt, delay time.Duration) (*Message, error) {
 	}
 	s := q.slot(r.Slot)
 	s.mu.Lock()
-	dead, err := s.nack(r, delay, q.clock.Now(), q.cfg.MaxRetries)
+	dead, err := s.nack(r, delay, q.clock.Now(), q.cfg().MaxRetries)
 	s.mu.Unlock()
 	if err == nil && dead != nil {
 		q.depth.Add(-1)
@@ -276,9 +303,12 @@ func (q *Queue) Sweep() SweepResult {
 	q.slotsMu.RUnlock()
 
 	for _, s := range slots {
+		if s.frozen.Load() {
+			continue // its messages are being moved; timers would mutate them
+		}
 		s.mu.Lock()
 		res.Released += s.releaseDelayed(now)
-		dead, requeued := s.sweepLeases(now, q.cfg.MaxRetries)
+		dead, requeued := s.sweepLeases(now, q.cfg().MaxRetries)
 		res.Redelivered += requeued
 		res.Expired += s.sweepTTL(now)
 		st := s.stats(now)
@@ -289,7 +319,7 @@ func (q *Queue) Sweep() SweepResult {
 	}
 
 	for _, m := range res.DeadLettered {
-		q.journal.AppendTerminal(SlotOf(q.cfg.Key, m.group(), q.slotCount()), m.ID, TerminalDeadLettered)
+		q.journal.AppendTerminal(SlotOf(q.cfg().Key, m.group(), q.slotCount()), m.ID, TerminalDeadLettered)
 	}
 	q.depth.Store(depth)
 	return res
@@ -356,6 +386,110 @@ func (q *Queue) Freeze() map[uint16][]*Message {
 }
 
 func (q *Queue) Thaw() { q.frozen.Store(false) }
+
+// FreezeSlots stops the named slots changing and returns copies of what they
+// hold. Unlike Freeze it does not remove anything: the messages stay here until
+// the new owner has them on disk and placement has moved, so a handoff that
+// fails leaves this node still able to serve them.
+func (q *Queue) FreezeSlots(ids []uint16) map[uint16][]*Message {
+	out := make(map[uint16][]*Message, len(ids))
+	for _, id := range ids {
+		if int(id) >= q.slotCount() {
+			continue
+		}
+		s := q.slot(id)
+		s.frozen.Store(true)
+
+		s.mu.Lock()
+		msgs := s.copyAll()
+		s.mu.Unlock()
+		if len(msgs) > 0 {
+			out[id] = msgs
+		}
+	}
+	return out
+}
+
+// ThawSlots puts frozen slots back into service. Used when a handoff is
+// abandoned, and by the reconciler when it finds a slot frozen by a migration
+// that never finished.
+func (q *Queue) ThawSlots(ids []uint16) {
+	for _, id := range ids {
+		if int(id) < q.slotCount() {
+			q.slot(id).frozen.Store(false)
+		}
+	}
+}
+
+// DropSlots removes slots this node no longer owns. Called only once the new
+// owner is serving them.
+func (q *Queue) DropSlots(ids []uint16) int {
+	dropped := 0
+	for _, id := range ids {
+		if int(id) >= q.slotCount() {
+			continue
+		}
+		s := q.slot(id)
+		s.mu.Lock()
+		dropped += len(s.drain())
+		s.mu.Unlock()
+		s.frozen.Store(false) // empty now; it may be handed back later
+	}
+	q.recountDepth()
+	return dropped
+}
+
+// FrozenSlots lists slots currently held out of service, so the reconciler can
+// spot a migration that stalled.
+func (q *Queue) FrozenSlots() []uint16 {
+	var out []uint16
+	q.slotsMu.RLock()
+	defer q.slotsMu.RUnlock()
+	for id, s := range q.slots {
+		if s.frozen.Load() {
+			out = append(out, id)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// HeldSlots lists every slot with anything in it, which is what the reconciler
+// compares against placement.
+func (q *Queue) HeldSlots() []uint16 {
+	var out []uint16
+	q.slotsMu.RLock()
+	defer q.slotsMu.RUnlock()
+	for id, s := range q.slots {
+		s.mu.Lock()
+		empty := s.st.ready[0]+s.st.ready[1]+s.st.ready[2] == 0 &&
+			s.st.inflight == 0 && s.st.delayed == 0
+		s.mu.Unlock()
+		if !empty {
+			out = append(out, id)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func (q *Queue) recountDepth() {
+	var depth int64
+	q.slotsMu.RLock()
+	slots := make([]*slot, 0, len(q.slots))
+	for _, s := range q.slots {
+		slots = append(slots, s)
+	}
+	q.slotsMu.RUnlock()
+	now := q.clock.Now()
+	for _, s := range slots {
+		s.mu.Lock()
+		st := s.stats(now)
+		s.mu.Unlock()
+		depth += st.ReadyTotal() + st.InFlight + st.Delayed
+	}
+	q.depth.Store(depth)
+}
 
 // Absorb merges messages in, inserting by Seq rather than appending so an
 // older generation lands ahead of anything already here.

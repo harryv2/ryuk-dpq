@@ -93,7 +93,9 @@ export default function Queues() {
                   </td>
                   <td>
                     {q.distributed ? (
-                      <span className="tag dist">distributed</span>
+                      <span className="tag dist" title="Machines this queue may use">
+                        distributed{q.placementWidth ? ` · ${q.placementWidth}` : ""}
+                      </span>
                     ) : (
                       <span className="tag plain">single node</span>
                     )}

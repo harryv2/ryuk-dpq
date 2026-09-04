@@ -38,6 +38,3 @@ func (l *QueueLogic) Recover() error {
 	}
 	return nil
 }
-
-// Sweep runs the timers on every queue. Callable directly so tests drive the
-// real path without waiting for real time.

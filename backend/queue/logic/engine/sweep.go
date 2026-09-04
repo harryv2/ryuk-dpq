@@ -128,8 +128,23 @@ func (s *slot) releaseDelayed(now time.Time) int {
 	return n
 }
 
+// copyAll returns everything the slot holds without removing it, so a handoff
+// can ship the messages while this node stays able to serve them if it fails.
+func (s *slot) copyAll() []*Message {
+	out := make([]*Message, 0, len(s.inflight))
+	for _, l := range s.inflight {
+		out = append(out, l.msg)
+	}
+	for _, g := range s.groups {
+		out = append(out, g.msgs.all()...)
+	}
+	for _, e := range s.delayed {
+		out = append(out, e.msg)
+	}
+	return out
+}
+
 // drain removes every message from the slot and returns them in Seq order.
-// Used when a slot is handed to another node.
 func (s *slot) drain() []*Message {
 	out := make([]*Message, 0, len(s.inflight))
 	for _, l := range s.inflight {

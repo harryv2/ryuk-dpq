@@ -27,7 +27,7 @@ func TestTimeseriesScopesToTheCallersOrg(t *testing.T) {
 			return entity.TimeseriesResponse{Available: true}, nil
 		})
 
-	if _, err := l.Timeseries(context.Background(), "org1", "q", "5m"); err != nil {
+	if _, err := l.GetTimeseriesMetrics(context.Background(), "org1", "q", "5m"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -38,7 +38,7 @@ func TestTimeseriesRefusesAQueueTheOrgDoesNotOwn(t *testing.T) {
 	d.queues.EXPECT().Get(gomock.Any(), "org1", "elsewhere").
 		Return(entity.QueueConfig{}, enterr.NotFound("queue"))
 
-	_, err := l.Timeseries(context.Background(), "org1", "elsewhere", "5m")
+	_, err := l.GetTimeseriesMetrics(context.Background(), "org1", "elsewhere", "5m")
 	if enterr.CodeOf(err) != enterr.CodeNotFound {
 		t.Fatalf("want a not-found error, got %v", err)
 	}
@@ -72,7 +72,7 @@ func TestTimeseriesWindows(t *testing.T) {
 					return entity.TimeseriesResponse{Available: true}, nil
 				})
 
-			got, err := l.Timeseries(context.Background(), "org1", "q", c.asked)
+			got, err := l.GetTimeseriesMetrics(context.Background(), "org1", "q", c.asked)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -91,7 +91,7 @@ func TestTimeseriesWithoutAMonitoringSystem(t *testing.T) {
 	d.series.EXPECT().Query(gomock.Any(), gomock.Any()).
 		Return(entity.TimeseriesResponse{Available: false}, nil)
 
-	got, err := l.Timeseries(context.Background(), "org1", "q", "5m")
+	got, err := l.GetTimeseriesMetrics(context.Background(), "org1", "q", "5m")
 	if err != nil {
 		t.Fatalf("a missing monitoring system is not an error: %v", err)
 	}

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
@@ -42,7 +43,6 @@ type QueueRates struct {
 	Ack     float64 `json:"ack"`
 }
 
-// rateSample is the pair of counters a rate was last derived from.
 type rateSample struct {
 	Enqueued uint64    `json:"enqueued"`
 	Acked    uint64    `json:"acked"`
@@ -151,7 +151,7 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 		}
 		s, err := l.nodesGRPCRepo.Stats(ctx, m.Addr, cfg.Spec())
 		if err != nil {
-			// It owns slotsPlacementTableRepo but has never been sent a message for them, so it has
+			// It owns slots but has never been sent a message for them, so it has
 			// no queue in memory. That is zero, not unreachable.
 			if enterr.CodeOf(err) == enterr.CodeNotFound {
 				continue
@@ -167,8 +167,8 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	return resp, nil
 }
 
-// slotsByOwner counts how many slotsPlacementTableRepo of this queue each machine holds, so an
-// unreachable machine can be reported as the number of slotsPlacementTableRepo it took with it.
+// slotsByOwner counts how many slots of this queue each machine holds, so an
+// unreachable machine can be reported as the number of slots it took with it.
 func slotsByOwner(cfg entity.QueueConfig) map[string]int {
 	out := map[string]int{}
 	for _, owner := range cfg.SlotOwners {
@@ -179,10 +179,10 @@ func slotsByOwner(cfg entity.QueueConfig) map[string]int {
 	return out
 }
 
-func (l *GatewayLogic) Metrics(ctx context.Context, org string) ([]entity.QueueStatsResponse, error) {
+func (l *GatewayLogic) GetMetrics(ctx context.Context, org string) ([]entity.QueueStatsResponse, error) {
 	cfgs, err := l.queueTableRepo.ListByOrg(ctx, org)
 	if err != nil {
-		return nil, enterr.Internal("list queueTableRepo", err)
+		return nil, enterr.Internal("list queues", err)
 	}
 	out := make([]entity.QueueStatsResponse, 0, len(cfgs))
 	for _, c := range cfgs {
@@ -192,10 +192,10 @@ func (l *GatewayLogic) Metrics(ctx context.Context, org string) ([]entity.QueueS
 	return out, nil
 }
 
-func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, error) {
+func (l *GatewayLogic) GetClusterDetails(ctx context.Context) (entity.ClusterResponse, error) {
 	cfgs, err := l.queueTableRepo.ListAll(ctx)
 	if err != nil {
-		return entity.ClusterResponse{}, enterr.Internal("list queueTableRepo", err)
+		return entity.ClusterResponse{}, enterr.Internal("list queues", err)
 	}
 	cfgs = l.withPlacement(ctx, cfgs)
 
@@ -237,7 +237,9 @@ func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, err
 	}
 
 	out := entity.ClusterResponse{}
+	live := map[string]bool{}
 	for _, m := range l.membershipRepo.Members() {
+		live[m.ID] = true
 		node := entity.ClusterNode{ID: m.ID, Addr: m.Addr, Queues: []entity.ClusterPlacement{}}
 		for _, k := range order[m.ID] {
 			p := meta[k]
@@ -246,6 +248,24 @@ func (l *GatewayLogic) Cluster(ctx context.Context) (entity.ClusterResponse, err
 		}
 		out.Nodes = append(out.Nodes, node)
 	}
+
+	// Slots whose owner is no longer registered. Nothing reassigns them, because
+	// the data is only there, so a queue left entirely on lost machines would
+	// otherwise disappear from this view instead of showing as broken.
+	lost := map[string]int{}
+	for p, n := range slots {
+		if !live[p.node] {
+			lost[p.queue] += n
+		}
+	}
+	for k, n := range lost {
+		p := meta[k]
+		p.Slots = n
+		out.Unavailable = append(out.Unavailable, p)
+	}
+	sort.Slice(out.Unavailable, func(i, j int) bool {
+		return out.Unavailable[i].Queue < out.Unavailable[j].Queue
+	})
 	return out, nil
 }
 

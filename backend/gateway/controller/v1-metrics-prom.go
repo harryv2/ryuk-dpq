@@ -16,7 +16,7 @@ func (h *Handlers) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for org := range uniqueOrgs(h.orgs) {
-		queues, err := h.app.Metrics(r.Context(), org)
+		queues, err := h.app.GetMetrics(r.Context(), org)
 		if err != nil {
 			continue
 		}

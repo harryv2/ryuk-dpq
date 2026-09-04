@@ -20,6 +20,7 @@ export default function NewQueue() {
     starvationReserve: 0.2,
     deadLetterQueue: "",
     distributed: false,
+    placementWidth: 6,
   });
 
   // The dead-letter queue has to already exist, so it is picked rather than typed.
@@ -35,7 +36,12 @@ export default function NewQueue() {
     setBusy(true);
     setErr("");
     try {
-      await api.createQueue(org.token, { ...f, maxRetries: Number(f.maxRetries) });
+      const { placementWidth, ...rest } = f;
+      await api.createQueue(org.token, {
+        ...rest,
+        maxRetries: Number(f.maxRetries),
+        ...(f.distributed ? { placementWidth: Number(placementWidth) } : {}),
+      });
       router.push(`/queue?name=${encodeURIComponent(f.name)}`);
     } catch (e: any) {
       setErr(e.message);
@@ -71,7 +77,7 @@ export default function NewQueue() {
             onChange={(e) => set("distributed", e.target.value === "true")}
           >
             <option value="false">Single node — exact priority, FIFO and counts</option>
-            <option value="true">Distributed — spreads over up to 64 machines</option>
+            <option value="true">Distributed — spreads over several machines</option>
           </select>
           <p className="field-hint">
             {f.distributed
@@ -79,6 +85,22 @@ export default function NewQueue() {
               : "All 16 slots live on one machine, which handles a few hundred thousand messages a second. If that machine goes down the queue waits for it."}
           </p>
         </label>
+
+        {f.distributed && (
+          <label>
+            <span>Machines to spread over</span>
+            <input
+              type="number" min={2} max={64} value={f.placementWidth}
+              onChange={(e) => set("placementWidth", e.target.value)}
+            />
+            <p className="field-hint">
+              The queue only ever uses this many machines, picked by hash, however
+              large the cluster grows. A smaller number means fewer queues share a
+              machine with this one, so one bad queue reaches fewer of them. Fixed
+              once the queue exists.
+            </p>
+          </label>
+        )}
 
         <div className="grid cols-2">
           <label>

@@ -6,15 +6,12 @@ import (
 	"strings"
 )
 
-// loadDotenv reads .env files into the environment before the config is built,
-// so a local run needs no exported variables. It is best effort: a missing file
-// is the normal case in a container, where the environment is set directly.
+// loadDotenv fills gaps in the environment before the config is built, so a
+// local run needs no exported variables. Best effort: a missing file is normal.
 //
-// A variable is only ever filled in, never replaced, so the first source to
-// define one wins. Files are therefore read most specific first, and the real
-// environment -- which is checked before any of them -- beats all of it. That
-// is what lets a shared .env sit in the repo while a run configuration or a
-// shell override still takes precedence without editing the file.
+// A variable is only ever filled in, never replaced, so the first source wins
+// and files are read most specific first. The real environment beats all of
+// them, which is what lets a shared .env sit in the repo.
 //
 //	$RYUK_ENV_FILE   an explicit path, wins over both files
 //	.env.<service>   just this one

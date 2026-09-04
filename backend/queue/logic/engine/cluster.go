@@ -30,7 +30,6 @@ type Cluster interface {
 	LocalSlots(q QueueKey, slots int) []uint16
 }
 
-// LocalCluster owns every slot, which is what a single node does.
 type LocalCluster struct {
 	mu  sync.Mutex
 	all map[int][]uint16

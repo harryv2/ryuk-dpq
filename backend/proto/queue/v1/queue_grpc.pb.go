@@ -8,7 +8,6 @@ package queuev1
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -20,17 +19,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueueService_Enqueue_FullMethodName   = "/ryuk.queue.v1.QueueService/Enqueue"
-	QueueService_Dequeue_FullMethodName   = "/ryuk.queue.v1.QueueService/Dequeue"
-	QueueService_Ack_FullMethodName       = "/ryuk.queue.v1.QueueService/Ack"
-	QueueService_Nack_FullMethodName      = "/ryuk.queue.v1.QueueService/Nack"
-	QueueService_Stats_FullMethodName     = "/ryuk.queue.v1.QueueService/Stats"
-	QueueService_StatsAll_FullMethodName  = "/ryuk.queue.v1.QueueService/StatsAll"
-	QueueService_Drop_FullMethodName      = "/ryuk.queue.v1.QueueService/Drop"
-	QueueService_Freeze_FullMethodName    = "/ryuk.queue.v1.QueueService/Freeze"
-	QueueService_Absorb_FullMethodName    = "/ryuk.queue.v1.QueueService/Absorb"
-	QueueService_Subscribe_FullMethodName = "/ryuk.queue.v1.QueueService/Subscribe"
-	QueueService_Health_FullMethodName    = "/ryuk.queue.v1.QueueService/Health"
+	QueueService_Enqueue_FullMethodName     = "/ryuk.queue.v1.QueueService/Enqueue"
+	QueueService_Dequeue_FullMethodName     = "/ryuk.queue.v1.QueueService/Dequeue"
+	QueueService_Ack_FullMethodName         = "/ryuk.queue.v1.QueueService/Ack"
+	QueueService_Nack_FullMethodName        = "/ryuk.queue.v1.QueueService/Nack"
+	QueueService_Stats_FullMethodName       = "/ryuk.queue.v1.QueueService/Stats"
+	QueueService_StatsAll_FullMethodName    = "/ryuk.queue.v1.QueueService/StatsAll"
+	QueueService_Drop_FullMethodName        = "/ryuk.queue.v1.QueueService/Drop"
+	QueueService_PrepareMove_FullMethodName = "/ryuk.queue.v1.QueueService/PrepareMove"
+	QueueService_Absorb_FullMethodName      = "/ryuk.queue.v1.QueueService/Absorb"
+	QueueService_DiscardMove_FullMethodName = "/ryuk.queue.v1.QueueService/DiscardMove"
+	QueueService_AbortMove_FullMethodName   = "/ryuk.queue.v1.QueueService/AbortMove"
+	QueueService_Freeze_FullMethodName      = "/ryuk.queue.v1.QueueService/Freeze"
+	QueueService_Held_FullMethodName        = "/ryuk.queue.v1.QueueService/Held"
+	QueueService_Subscribe_FullMethodName   = "/ryuk.queue.v1.QueueService/Subscribe"
+	QueueService_Health_FullMethodName      = "/ryuk.queue.v1.QueueService/Health"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -44,8 +47,18 @@ type QueueServiceClient interface {
 	Stats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*QueueStats, error)
 	StatsAll(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*StatsAllResponse, error)
 	Drop(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*Empty, error)
-	Freeze(ctx context.Context, in *FreezeRequest, opts ...grpc.CallOption) (*Transfer, error)
+	// A handoff. PrepareMove snapshots without removing, so a move that fails
+	// leaves this node still able to serve. DiscardMove is what finally removes,
+	// and only runs once the new owner is serving; AbortMove puts them back.
+	PrepareMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Transfer, error)
 	Absorb(ctx context.Context, in *Transfer, opts ...grpc.CallOption) (*Empty, error)
+	DiscardMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Empty, error)
+	AbortMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Empty, error)
+	// Freeze is the old destructive form, kept for whole-queue migration.
+	Freeze(ctx context.Context, in *FreezeRequest, opts ...grpc.CallOption) (*Transfer, error)
+	// Held reports what this node has, so the gateway can reconcile it against
+	// placement and repair anything a failed handoff left behind.
+	Held(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*HeldResponse, error)
 	// Subscribe is how a parked consumer is woken. Notification and dequeue are
 	// separate so only one dequeue is ever issued: fanning a waiting dequeue out
 	// to several nodes would lease messages nobody is processing.
@@ -131,10 +144,10 @@ func (c *queueServiceClient) Drop(ctx context.Context, in *StatsRequest, opts ..
 	return out, nil
 }
 
-func (c *queueServiceClient) Freeze(ctx context.Context, in *FreezeRequest, opts ...grpc.CallOption) (*Transfer, error) {
+func (c *queueServiceClient) PrepareMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Transfer, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Transfer)
-	err := c.cc.Invoke(ctx, QueueService_Freeze_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, QueueService_PrepareMove_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +158,46 @@ func (c *queueServiceClient) Absorb(ctx context.Context, in *Transfer, opts ...g
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, QueueService_Absorb_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) DiscardMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, QueueService_DiscardMove_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) AbortMove(ctx context.Context, in *SlotSet, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, QueueService_AbortMove_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) Freeze(ctx context.Context, in *FreezeRequest, opts ...grpc.CallOption) (*Transfer, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Transfer)
+	err := c.cc.Invoke(ctx, QueueService_Freeze_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) Held(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*HeldResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeldResponse)
+	err := c.cc.Invoke(ctx, QueueService_Held_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +244,18 @@ type QueueServiceServer interface {
 	Stats(context.Context, *StatsRequest) (*QueueStats, error)
 	StatsAll(context.Context, *Empty) (*StatsAllResponse, error)
 	Drop(context.Context, *StatsRequest) (*Empty, error)
-	Freeze(context.Context, *FreezeRequest) (*Transfer, error)
+	// A handoff. PrepareMove snapshots without removing, so a move that fails
+	// leaves this node still able to serve. DiscardMove is what finally removes,
+	// and only runs once the new owner is serving; AbortMove puts them back.
+	PrepareMove(context.Context, *SlotSet) (*Transfer, error)
 	Absorb(context.Context, *Transfer) (*Empty, error)
+	DiscardMove(context.Context, *SlotSet) (*Empty, error)
+	AbortMove(context.Context, *SlotSet) (*Empty, error)
+	// Freeze is the old destructive form, kept for whole-queue migration.
+	Freeze(context.Context, *FreezeRequest) (*Transfer, error)
+	// Held reports what this node has, so the gateway can reconcile it against
+	// placement and repair anything a failed handoff left behind.
+	Held(context.Context, *Empty) (*HeldResponse, error)
 	// Subscribe is how a parked consumer is woken. Notification and dequeue are
 	// separate so only one dequeue is ever issued: fanning a waiting dequeue out
 	// to several nodes would lease messages nobody is processing.
@@ -229,11 +292,23 @@ func (UnimplementedQueueServiceServer) StatsAll(context.Context, *Empty) (*Stats
 func (UnimplementedQueueServiceServer) Drop(context.Context, *StatsRequest) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Drop not implemented")
 }
-func (UnimplementedQueueServiceServer) Freeze(context.Context, *FreezeRequest) (*Transfer, error) {
-	return nil, status.Error(codes.Unimplemented, "method Freeze not implemented")
+func (UnimplementedQueueServiceServer) PrepareMove(context.Context, *SlotSet) (*Transfer, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareMove not implemented")
 }
 func (UnimplementedQueueServiceServer) Absorb(context.Context, *Transfer) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Absorb not implemented")
+}
+func (UnimplementedQueueServiceServer) DiscardMove(context.Context, *SlotSet) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscardMove not implemented")
+}
+func (UnimplementedQueueServiceServer) AbortMove(context.Context, *SlotSet) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method AbortMove not implemented")
+}
+func (UnimplementedQueueServiceServer) Freeze(context.Context, *FreezeRequest) (*Transfer, error) {
+	return nil, status.Error(codes.Unimplemented, "method Freeze not implemented")
+}
+func (UnimplementedQueueServiceServer) Held(context.Context, *Empty) (*HeldResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Held not implemented")
 }
 func (UnimplementedQueueServiceServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[WorkAvailable]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -388,20 +463,20 @@ func _QueueService_Drop_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _QueueService_Freeze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FreezeRequest)
+func _QueueService_PrepareMove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SlotSet)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(QueueServiceServer).Freeze(ctx, in)
+		return srv.(QueueServiceServer).PrepareMove(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: QueueService_Freeze_FullMethodName,
+		FullMethod: QueueService_PrepareMove_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(QueueServiceServer).Freeze(ctx, req.(*FreezeRequest))
+		return srv.(QueueServiceServer).PrepareMove(ctx, req.(*SlotSet))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -420,6 +495,78 @@ func _QueueService_Absorb_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(QueueServiceServer).Absorb(ctx, req.(*Transfer))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_DiscardMove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SlotSet)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).DiscardMove(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_DiscardMove_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).DiscardMove(ctx, req.(*SlotSet))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_AbortMove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SlotSet)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).AbortMove(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_AbortMove_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).AbortMove(ctx, req.(*SlotSet))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_Freeze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FreezeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).Freeze(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_Freeze_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).Freeze(ctx, req.(*FreezeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_Held_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).Held(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_Held_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).Held(ctx, req.(*Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -489,12 +636,28 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _QueueService_Drop_Handler,
 		},
 		{
-			MethodName: "Freeze",
-			Handler:    _QueueService_Freeze_Handler,
+			MethodName: "PrepareMove",
+			Handler:    _QueueService_PrepareMove_Handler,
 		},
 		{
 			MethodName: "Absorb",
 			Handler:    _QueueService_Absorb_Handler,
+		},
+		{
+			MethodName: "DiscardMove",
+			Handler:    _QueueService_DiscardMove_Handler,
+		},
+		{
+			MethodName: "AbortMove",
+			Handler:    _QueueService_AbortMove_Handler,
+		},
+		{
+			MethodName: "Freeze",
+			Handler:    _QueueService_Freeze_Handler,
+		},
+		{
+			MethodName: "Held",
+			Handler:    _QueueService_Held_Handler,
 		},
 		{
 			MethodName: "Health",

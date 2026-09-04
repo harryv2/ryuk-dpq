@@ -122,6 +122,28 @@ message SlotMessages {
 message Transfer {
   QueueSpec spec = 1;
   map<uint32, SlotMessages> by_slot = 2;
+  // Identifies one handoff, so absorbing the same one twice is a no-op.
+  string move_id = 3;
+}
+
+// Names the slots of one queue for a step of a handoff.
+message SlotSet {
+  QueueSpec spec = 1;
+  repeated uint32 slots = 2;
+  string move_id = 3;
+}
+
+// What a node actually holds, for the reconciler to compare against placement.
+message HeldSlots {
+  string org = 1;
+  string queue = 2;
+  repeated uint32 slots = 3;
+  repeated uint32 frozen = 4;
+}
+
+message HeldResponse {
+  string node_id = 1;
+  repeated HeldSlots queues = 2;
 }
 
 message SubscribeRequest {
@@ -151,8 +173,20 @@ service QueueService {
   rpc StatsAll(Empty) returns (StatsAllResponse);
 
   rpc Drop(StatsRequest) returns (Empty);
-  rpc Freeze(FreezeRequest) returns (Transfer);
+  // A handoff. PrepareMove snapshots without removing, so a move that fails
+  // leaves this node still able to serve. DiscardMove is what finally removes,
+  // and only runs once the new owner is serving; AbortMove puts them back.
+  rpc PrepareMove(SlotSet) returns (Transfer);
   rpc Absorb(Transfer) returns (Empty);
+  rpc DiscardMove(SlotSet) returns (Empty);
+  rpc AbortMove(SlotSet) returns (Empty);
+
+  // Freeze is the old destructive form, kept for whole-queue migration.
+  rpc Freeze(FreezeRequest) returns (Transfer);
+
+  // Held reports what this node has, so the gateway can reconcile it against
+  // placement and repair anything a failed handoff left behind.
+  rpc Held(Empty) returns (HeldResponse);
 
   // Subscribe is how a parked consumer is woken. Notification and dequeue are
   // separate so only one dequeue is ever issued: fanning a waiting dequeue out

@@ -24,8 +24,14 @@ type Repo struct {
 	mu      sync.RWMutex
 	members map[string]entity.Member
 
-	once    sync.Once
-	changed chan struct{}
+	once sync.Once
+
+	// One channel per listener, not one shared. A membership change has to
+	// reach every watcher: the rebalancer and the notification subscriber both
+	// wait on this, and a single buffered channel delivers to whichever
+	// receives first, silently starving the other.
+	listenMu  sync.Mutex
+	listeners []chan struct{}
 }
 
 // Endpoints is a named type so the wire graph can tell it from any other
@@ -44,7 +50,6 @@ func New(endpoints Endpoints, log *slog.Logger) (*Repo, func(), error) {
 		cli:     cli,
 		log:     log,
 		members: map[string]entity.Member{},
-		changed: make(chan struct{}, 1),
 	}
 	return r, func() { _ = cli.Close() }, nil
 }
@@ -96,13 +101,29 @@ func (r *Repo) follow(ctx context.Context, rev int64) {
 }
 
 func (r *Repo) notify() {
-	select {
-	case r.changed <- struct{}{}:
-	default:
+	r.listenMu.Lock()
+	defer r.listenMu.Unlock()
+	for _, ch := range r.listeners {
+		// Buffered by one: a listener that has not drained its previous signal
+		// already knows the membership moved, so dropping this one loses
+		// nothing.
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
 	}
 }
 
-func (r *Repo) Changed() <-chan struct{} { return r.changed }
+// Changed returns a channel that receives when the member list moves. Each call
+// registers a new listener, so call it once and keep the result rather than
+// inside a select loop.
+func (r *Repo) Changed() <-chan struct{} {
+	ch := make(chan struct{}, 1)
+	r.listenMu.Lock()
+	r.listeners = append(r.listeners, ch)
+	r.listenMu.Unlock()
+	return ch
+}
 
 // Members is sorted so two components computing placement from the same set get
 // the same answer whatever order the map happened to iterate in.

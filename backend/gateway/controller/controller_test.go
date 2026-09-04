@@ -31,6 +31,10 @@ func TestCreateQueueValidation(t *testing.T) {
 		{"threshold above ttl", `{"name":"orders","defaultTtl":"1m","starvationThreshold":"2m"}`, false},
 		{"reserve out of range", `{"name":"orders","starvationReserve":1.5}`, false},
 		{"negative depth", `{"name":"orders","maxDepth":-1}`, false},
+		{"width on a distributed queue", `{"name":"orders","distributed":true,"placementWidth":8}`, true},
+		{"width on a single-node queue", `{"name":"orders","placementWidth":8}`, false},
+		{"width of one", `{"name":"orders","distributed":true,"placementWidth":1}`, false},
+		{"width past the slot count", `{"name":"orders","distributed":true,"placementWidth":65}`, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -56,6 +60,18 @@ func TestCreateQueueDefaults(t *testing.T) {
 	}
 	if s.StarvationThreshold != 15*time.Minute {
 		t.Fatalf("threshold should default to a quarter of the ttl, got %v", s.StarvationThreshold)
+	}
+	if s.PlacementWidth != 0 {
+		t.Fatalf("a single-node queue has no placement width, got %d", s.PlacementWidth)
+	}
+
+	req, err = createReq(`{"name":"orders","distributed":true}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Settings.PlacementWidth != constants.DefaultPlacementWidth {
+		t.Fatalf("width defaulted to %d, want %d",
+			req.Settings.PlacementWidth, constants.DefaultPlacementWidth)
 	}
 }
 

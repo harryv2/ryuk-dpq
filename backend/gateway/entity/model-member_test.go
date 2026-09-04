@@ -104,3 +104,54 @@ func TestNoMembersMeansNoOwner(t *testing.T) {
 		t.Fatal("an empty cluster has no owner")
 	}
 }
+
+func TestCandidatesBarelyMoveWhenAMachineJoins(t *testing.T) {
+	before := CandidatesFor("org1/orders", members(6), 4)
+	after := CandidatesFor("org1/orders", members(7), 4)
+
+	kept := 0
+	for _, a := range after {
+		for _, b := range before {
+			if a.ID == b.ID {
+				kept++
+			}
+		}
+	}
+	// Scores do not change when a machine joins, so it can only displace the
+	// lowest-ranked candidate. Everything else stays put and nothing moves.
+	if kept < 3 {
+		t.Fatalf("one new machine displaced %d of 4 candidates", 4-kept)
+	}
+}
+
+func TestCandidatesBoundHowManyMachinesAQueueUses(t *testing.T) {
+	ms := members(20)
+	for _, width := range []int{2, 4, 8} {
+		seen := map[string]bool{}
+		for slot := 0; slot < 64; slot++ {
+			c := CandidatesFor("org1/orders", ms, width)
+			m, _ := OwnerFor(OwnerKey("org1", "orders", slot, true), c)
+			seen[m.ID] = true
+		}
+		if len(seen) > width {
+			t.Fatalf("width %d: queue landed on %d machines", width, len(seen))
+		}
+	}
+}
+
+func TestCandidatesFallBackToTheWholeCluster(t *testing.T) {
+	ms := members(3)
+	for _, width := range []int{0, 3, 9} {
+		if got := len(CandidatesFor("org1/orders", ms, width)); got != 3 {
+			t.Fatalf("width %d: got %d candidates, want the whole cluster", width, got)
+		}
+	}
+}
+
+func TestCandidatesRankTheSameWayAsTheOwner(t *testing.T) {
+	ms := members(12)
+	winner, _ := OwnerFor("org1/orders", ms)
+	if CandidatesFor("org1/orders", ms, 4)[0].ID != winner.ID {
+		t.Fatal("the first candidate must be the machine OwnerFor picks")
+	}
+}

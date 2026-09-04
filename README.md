@@ -14,7 +14,8 @@ tracks each message from submission to completion, and reports metrics.
 [node](docs/lld/03-node.md) ·
 [gateway](docs/lld/04-gateway.md) ·
 [placement and metadata](docs/lld/05-placement-and-metadata.md) ·
-[metrics and testing](docs/lld/06-metrics-and-testing.md)
+[metrics and testing](docs/lld/06-metrics-and-testing.md) ·
+[placement width and safe migration](docs/lld/07-placement-and-safe-migration.md)
 
 ## Demo
 
@@ -135,19 +136,37 @@ curl -X POST localhost:8090/v1/queues/orders/messages/ack -H "$T" \
   -d '{"receipt":"<from the dequeue>"}'
 
 curl localhost:8090/v1/queues/orders/stats -H "$T"
+
+# settings can be changed on a running queue; placement cannot
+curl -X PATCH localhost:8090/v1/queues/orders -H "$T" \
+  -d '{"visibilityTimeout":"60s","maxRetries":5}'
 ```
+
+Changing a setting rewrites nothing already queued. A value read when a message
+is **delivered** — the visibility timeout — applies to the next delivery, and
+messages already in flight keep the deadline they were given. A value read when
+one **fails** — the retry limit — applies to messages already handed out, so
+lowering it can dead-letter them on their next failure. Nodes pick the change up
+on their next request, because the settings travel with every one.
 
 ## Two kinds of queue
 
 |  | `distributed: false` (default) | `distributed: true` |
 |---|---|---|
-| Where it lives | One node, all 16 slots | Up to 64 nodes, a slot each |
+| Where it lives | One node, all 16 slots | 64 slots over `placementWidth` nodes (6 by default) |
 | Priority and FIFO | **Exact** | Approximate across machines |
 | Message counts | **Exact**, one request | Summed across machines |
 | If its node dies | Whole queue waits for it | Only its slots; the rest keep serving |
 
 Ordering **within a group** is strict either way, because a group never spans
 slots. Two messages that must be ordered should share a group key.
+
+A distributed queue does not use the whole cluster. `placementWidth` (2 to 64,
+6 by default) is how many machines it may land on, chosen by the same hash that
+picks its owners, so it stays on that many however large the cluster grows. It
+bounds what one queue can disturb: a queue that floods is sharing machines with
+a handful of others, not with all of them. It is fixed at creation, because
+changing it re-derives the candidate set and would move most of the queue.
 
 **Priority is a number from 0 to 100**, ordered exactly — 91 is served before 90.
 `HIGH`, `MEDIUM` and `LOW` are accepted as shorthand for 75, 50 and 25, and the

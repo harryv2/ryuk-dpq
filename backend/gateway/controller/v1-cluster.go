@@ -4,8 +4,8 @@ import (
 	"net/http"
 )
 
-func (h *Handlers) Cluster(w http.ResponseWriter, r *http.Request) {
-	out, err := h.app.Cluster(r.Context())
+func (h *Handlers) HandleGetClusterDetails(w http.ResponseWriter, r *http.Request) {
+	out, err := h.app.GetClusterDetails(r.Context())
 	if err != nil {
 		writeErr(w, err)
 		return

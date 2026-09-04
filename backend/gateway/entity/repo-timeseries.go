@@ -7,7 +7,6 @@ import (
 
 //go:generate mockgen -source=repo-timeseries.go -destination=../mocks/mock_timeseries_repo.go -package=mocks
 
-// Series is one line on a chart: a name and the points behind it.
 type Series struct {
 	Name   string        `json:"name"`
 	Points []SeriesPoint `json:"points"`

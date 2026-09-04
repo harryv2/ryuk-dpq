@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Clock is injected so timeouts are testable without sleeping.
 type Clock interface {
 	Now() time.Time
 }

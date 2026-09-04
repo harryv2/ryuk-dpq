@@ -7,12 +7,11 @@
 package queuev1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1068,9 +1067,11 @@ func (x *SlotMessages) GetMessages() []*WireMessage {
 // Transfer carries a queue's contents to its new owner, keyed by slot so
 // placement survives the move.
 type Transfer struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Spec          *QueueSpec               `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
-	BySlot        map[uint32]*SlotMessages `protobuf:"bytes,2,rep,name=by_slot,json=bySlot,proto3" json:"by_slot,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state  protoimpl.MessageState   `protogen:"open.v1"`
+	Spec   *QueueSpec               `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	BySlot map[uint32]*SlotMessages `protobuf:"bytes,2,rep,name=by_slot,json=bySlot,proto3" json:"by_slot,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Identifies one handoff, so absorbing the same one twice is a no-op.
+	MoveId        string `protobuf:"bytes,3,opt,name=move_id,json=moveId,proto3" json:"move_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1119,6 +1120,195 @@ func (x *Transfer) GetBySlot() map[uint32]*SlotMessages {
 	return nil
 }
 
+func (x *Transfer) GetMoveId() string {
+	if x != nil {
+		return x.MoveId
+	}
+	return ""
+}
+
+// Names the slots of one queue for a step of a handoff.
+type SlotSet struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Spec          *QueueSpec             `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Slots         []uint32               `protobuf:"varint,2,rep,packed,name=slots,proto3" json:"slots,omitempty"`
+	MoveId        string                 `protobuf:"bytes,3,opt,name=move_id,json=moveId,proto3" json:"move_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SlotSet) Reset() {
+	*x = SlotSet{}
+	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SlotSet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SlotSet) ProtoMessage() {}
+
+func (x *SlotSet) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SlotSet.ProtoReflect.Descriptor instead.
+func (*SlotSet) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SlotSet) GetSpec() *QueueSpec {
+	if x != nil {
+		return x.Spec
+	}
+	return nil
+}
+
+func (x *SlotSet) GetSlots() []uint32 {
+	if x != nil {
+		return x.Slots
+	}
+	return nil
+}
+
+func (x *SlotSet) GetMoveId() string {
+	if x != nil {
+		return x.MoveId
+	}
+	return ""
+}
+
+// What a node actually holds, for the reconciler to compare against placement.
+type HeldSlots struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Queue         string                 `protobuf:"bytes,2,opt,name=queue,proto3" json:"queue,omitempty"`
+	Slots         []uint32               `protobuf:"varint,3,rep,packed,name=slots,proto3" json:"slots,omitempty"`
+	Frozen        []uint32               `protobuf:"varint,4,rep,packed,name=frozen,proto3" json:"frozen,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeldSlots) Reset() {
+	*x = HeldSlots{}
+	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeldSlots) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeldSlots) ProtoMessage() {}
+
+func (x *HeldSlots) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeldSlots.ProtoReflect.Descriptor instead.
+func (*HeldSlots) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *HeldSlots) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *HeldSlots) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *HeldSlots) GetSlots() []uint32 {
+	if x != nil {
+		return x.Slots
+	}
+	return nil
+}
+
+func (x *HeldSlots) GetFrozen() []uint32 {
+	if x != nil {
+		return x.Frozen
+	}
+	return nil
+}
+
+type HeldResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Queues        []*HeldSlots           `protobuf:"bytes,2,rep,name=queues,proto3" json:"queues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeldResponse) Reset() {
+	*x = HeldResponse{}
+	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeldResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeldResponse) ProtoMessage() {}
+
+func (x *HeldResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeldResponse.ProtoReflect.Descriptor instead.
+func (*HeldResponse) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *HeldResponse) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *HeldResponse) GetQueues() []*HeldSlots {
+	if x != nil {
+		return x.Queues
+	}
+	return nil
+}
+
 type SubscribeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GatewayId     string                 `protobuf:"bytes,1,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
@@ -1128,7 +1318,7 @@ type SubscribeRequest struct {
 
 func (x *SubscribeRequest) Reset() {
 	*x = SubscribeRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	mi := &file_queue_v1_queue_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +1330,7 @@ func (x *SubscribeRequest) String() string {
 func (*SubscribeRequest) ProtoMessage() {}
 
 func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	mi := &file_queue_v1_queue_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +1343,7 @@ func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{16}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SubscribeRequest) GetGatewayId() string {
@@ -1176,7 +1366,7 @@ type WorkAvailable struct {
 
 func (x *WorkAvailable) Reset() {
 	*x = WorkAvailable{}
-	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	mi := &file_queue_v1_queue_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1378,7 @@ func (x *WorkAvailable) String() string {
 func (*WorkAvailable) ProtoMessage() {}
 
 func (x *WorkAvailable) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	mi := &file_queue_v1_queue_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1391,7 @@ func (x *WorkAvailable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkAvailable.ProtoReflect.Descriptor instead.
 func (*WorkAvailable) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{17}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *WorkAvailable) GetOrg() string {
@@ -1235,7 +1425,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	mi := &file_queue_v1_queue_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1247,7 +1437,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	mi := &file_queue_v1_queue_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1260,7 +1450,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{18}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HealthResponse) GetStatus() string {
@@ -1368,13 +1558,26 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\x15deliver_after_unix_ns\x18\b \x01(\x03R\x12deliverAfterUnixNs\x12\x1a\n" +
 	"\battempts\x18\t \x01(\rR\battempts\"F\n" +
 	"\fSlotMessages\x126\n" +
-	"\bmessages\x18\x01 \x03(\v2\x1a.ryuk.queue.v1.WireMessageR\bmessages\"\xce\x01\n" +
+	"\bmessages\x18\x01 \x03(\v2\x1a.ryuk.queue.v1.WireMessageR\bmessages\"\xe7\x01\n" +
 	"\bTransfer\x12,\n" +
 	"\x04spec\x18\x01 \x01(\v2\x18.ryuk.queue.v1.QueueSpecR\x04spec\x12<\n" +
-	"\aby_slot\x18\x02 \x03(\v2#.ryuk.queue.v1.Transfer.BySlotEntryR\x06bySlot\x1aV\n" +
+	"\aby_slot\x18\x02 \x03(\v2#.ryuk.queue.v1.Transfer.BySlotEntryR\x06bySlot\x12\x17\n" +
+	"\amove_id\x18\x03 \x01(\tR\x06moveId\x1aV\n" +
 	"\vBySlotEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x121\n" +
-	"\x05value\x18\x02 \x01(\v2\x1b.ryuk.queue.v1.SlotMessagesR\x05value:\x028\x01\"1\n" +
+	"\x05value\x18\x02 \x01(\v2\x1b.ryuk.queue.v1.SlotMessagesR\x05value:\x028\x01\"f\n" +
+	"\aSlotSet\x12,\n" +
+	"\x04spec\x18\x01 \x01(\v2\x18.ryuk.queue.v1.QueueSpecR\x04spec\x12\x14\n" +
+	"\x05slots\x18\x02 \x03(\rR\x05slots\x12\x17\n" +
+	"\amove_id\x18\x03 \x01(\tR\x06moveId\"a\n" +
+	"\tHeldSlots\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x14\n" +
+	"\x05queue\x18\x02 \x01(\tR\x05queue\x12\x14\n" +
+	"\x05slots\x18\x03 \x03(\rR\x05slots\x12\x16\n" +
+	"\x06frozen\x18\x04 \x03(\rR\x06frozen\"Y\n" +
+	"\fHeldResponse\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x120\n" +
+	"\x06queues\x18\x02 \x03(\v2\x18.ryuk.queue.v1.HeldSlotsR\x06queues\"1\n" +
 	"\x10SubscribeRequest\x12\x1d\n" +
 	"\n" +
 	"gateway_id\x18\x01 \x01(\tR\tgatewayId\"Z\n" +
@@ -1384,7 +1587,7 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\rbest_priority\x18\x03 \x01(\rR\fbestPriority\"A\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x17\n" +
-	"\anode_id\x18\x02 \x01(\tR\x06nodeId2\xda\x05\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId2\xcd\a\n" +
 	"\fQueueService\x12H\n" +
 	"\aEnqueue\x12\x1d.ryuk.queue.v1.EnqueueRequest\x1a\x1e.ryuk.queue.v1.EnqueueResponse\x12H\n" +
 	"\aDequeue\x12\x1d.ryuk.queue.v1.DequeueRequest\x1a\x1e.ryuk.queue.v1.DequeueResponse\x126\n" +
@@ -1392,9 +1595,13 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\x04Nack\x12\x1a.ryuk.queue.v1.NackRequest\x1a\x14.ryuk.queue.v1.Empty\x12?\n" +
 	"\x05Stats\x12\x1b.ryuk.queue.v1.StatsRequest\x1a\x19.ryuk.queue.v1.QueueStats\x12A\n" +
 	"\bStatsAll\x12\x14.ryuk.queue.v1.Empty\x1a\x1f.ryuk.queue.v1.StatsAllResponse\x129\n" +
-	"\x04Drop\x12\x1b.ryuk.queue.v1.StatsRequest\x1a\x14.ryuk.queue.v1.Empty\x12?\n" +
-	"\x06Freeze\x12\x1c.ryuk.queue.v1.FreezeRequest\x1a\x17.ryuk.queue.v1.Transfer\x127\n" +
-	"\x06Absorb\x12\x17.ryuk.queue.v1.Transfer\x1a\x14.ryuk.queue.v1.Empty\x12L\n" +
+	"\x04Drop\x12\x1b.ryuk.queue.v1.StatsRequest\x1a\x14.ryuk.queue.v1.Empty\x12>\n" +
+	"\vPrepareMove\x12\x16.ryuk.queue.v1.SlotSet\x1a\x17.ryuk.queue.v1.Transfer\x127\n" +
+	"\x06Absorb\x12\x17.ryuk.queue.v1.Transfer\x1a\x14.ryuk.queue.v1.Empty\x12;\n" +
+	"\vDiscardMove\x12\x16.ryuk.queue.v1.SlotSet\x1a\x14.ryuk.queue.v1.Empty\x129\n" +
+	"\tAbortMove\x12\x16.ryuk.queue.v1.SlotSet\x1a\x14.ryuk.queue.v1.Empty\x12?\n" +
+	"\x06Freeze\x12\x1c.ryuk.queue.v1.FreezeRequest\x1a\x17.ryuk.queue.v1.Transfer\x129\n" +
+	"\x04Held\x12\x14.ryuk.queue.v1.Empty\x1a\x1b.ryuk.queue.v1.HeldResponse\x12L\n" +
 	"\tSubscribe\x12\x1f.ryuk.queue.v1.SubscribeRequest\x1a\x1c.ryuk.queue.v1.WorkAvailable0\x01\x12=\n" +
 	"\x06Health\x12\x14.ryuk.queue.v1.Empty\x1a\x1d.ryuk.queue.v1.HealthResponseB<Z:github.com/harryv2/ryuk-dpq/backend/proto/queue/v1;queuev1b\x06proto3"
 
@@ -1410,7 +1617,7 @@ func file_queue_v1_queue_proto_rawDescGZIP() []byte {
 	return file_queue_v1_queue_proto_rawDescData
 }
 
-var file_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_queue_v1_queue_proto_goTypes = []any{
 	(*QueueSpec)(nil),        // 0: ryuk.queue.v1.QueueSpec
 	(*EnqueueRequest)(nil),   // 1: ryuk.queue.v1.EnqueueRequest
@@ -1428,10 +1635,13 @@ var file_queue_v1_queue_proto_goTypes = []any{
 	(*WireMessage)(nil),      // 13: ryuk.queue.v1.WireMessage
 	(*SlotMessages)(nil),     // 14: ryuk.queue.v1.SlotMessages
 	(*Transfer)(nil),         // 15: ryuk.queue.v1.Transfer
-	(*SubscribeRequest)(nil), // 16: ryuk.queue.v1.SubscribeRequest
-	(*WorkAvailable)(nil),    // 17: ryuk.queue.v1.WorkAvailable
-	(*HealthResponse)(nil),   // 18: ryuk.queue.v1.HealthResponse
-	nil,                      // 19: ryuk.queue.v1.Transfer.BySlotEntry
+	(*SlotSet)(nil),          // 16: ryuk.queue.v1.SlotSet
+	(*HeldSlots)(nil),        // 17: ryuk.queue.v1.HeldSlots
+	(*HeldResponse)(nil),     // 18: ryuk.queue.v1.HeldResponse
+	(*SubscribeRequest)(nil), // 19: ryuk.queue.v1.SubscribeRequest
+	(*WorkAvailable)(nil),    // 20: ryuk.queue.v1.WorkAvailable
+	(*HealthResponse)(nil),   // 21: ryuk.queue.v1.HealthResponse
+	nil,                      // 22: ryuk.queue.v1.Transfer.BySlotEntry
 }
 var file_queue_v1_queue_proto_depIdxs = []int32{
 	0,  // 0: ryuk.queue.v1.EnqueueRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
@@ -1444,35 +1654,45 @@ var file_queue_v1_queue_proto_depIdxs = []int32{
 	11, // 7: ryuk.queue.v1.StatsAllResponse.queues:type_name -> ryuk.queue.v1.QueueStats
 	13, // 8: ryuk.queue.v1.SlotMessages.messages:type_name -> ryuk.queue.v1.WireMessage
 	0,  // 9: ryuk.queue.v1.Transfer.spec:type_name -> ryuk.queue.v1.QueueSpec
-	19, // 10: ryuk.queue.v1.Transfer.by_slot:type_name -> ryuk.queue.v1.Transfer.BySlotEntry
-	14, // 11: ryuk.queue.v1.Transfer.BySlotEntry.value:type_name -> ryuk.queue.v1.SlotMessages
-	1,  // 12: ryuk.queue.v1.QueueService.Enqueue:input_type -> ryuk.queue.v1.EnqueueRequest
-	3,  // 13: ryuk.queue.v1.QueueService.Dequeue:input_type -> ryuk.queue.v1.DequeueRequest
-	6,  // 14: ryuk.queue.v1.QueueService.Ack:input_type -> ryuk.queue.v1.AckRequest
-	7,  // 15: ryuk.queue.v1.QueueService.Nack:input_type -> ryuk.queue.v1.NackRequest
-	9,  // 16: ryuk.queue.v1.QueueService.Stats:input_type -> ryuk.queue.v1.StatsRequest
-	8,  // 17: ryuk.queue.v1.QueueService.StatsAll:input_type -> ryuk.queue.v1.Empty
-	9,  // 18: ryuk.queue.v1.QueueService.Drop:input_type -> ryuk.queue.v1.StatsRequest
-	10, // 19: ryuk.queue.v1.QueueService.Freeze:input_type -> ryuk.queue.v1.FreezeRequest
-	15, // 20: ryuk.queue.v1.QueueService.Absorb:input_type -> ryuk.queue.v1.Transfer
-	16, // 21: ryuk.queue.v1.QueueService.Subscribe:input_type -> ryuk.queue.v1.SubscribeRequest
-	8,  // 22: ryuk.queue.v1.QueueService.Health:input_type -> ryuk.queue.v1.Empty
-	2,  // 23: ryuk.queue.v1.QueueService.Enqueue:output_type -> ryuk.queue.v1.EnqueueResponse
-	5,  // 24: ryuk.queue.v1.QueueService.Dequeue:output_type -> ryuk.queue.v1.DequeueResponse
-	8,  // 25: ryuk.queue.v1.QueueService.Ack:output_type -> ryuk.queue.v1.Empty
-	8,  // 26: ryuk.queue.v1.QueueService.Nack:output_type -> ryuk.queue.v1.Empty
-	11, // 27: ryuk.queue.v1.QueueService.Stats:output_type -> ryuk.queue.v1.QueueStats
-	12, // 28: ryuk.queue.v1.QueueService.StatsAll:output_type -> ryuk.queue.v1.StatsAllResponse
-	8,  // 29: ryuk.queue.v1.QueueService.Drop:output_type -> ryuk.queue.v1.Empty
-	15, // 30: ryuk.queue.v1.QueueService.Freeze:output_type -> ryuk.queue.v1.Transfer
-	8,  // 31: ryuk.queue.v1.QueueService.Absorb:output_type -> ryuk.queue.v1.Empty
-	17, // 32: ryuk.queue.v1.QueueService.Subscribe:output_type -> ryuk.queue.v1.WorkAvailable
-	18, // 33: ryuk.queue.v1.QueueService.Health:output_type -> ryuk.queue.v1.HealthResponse
-	23, // [23:34] is the sub-list for method output_type
-	12, // [12:23] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	22, // 10: ryuk.queue.v1.Transfer.by_slot:type_name -> ryuk.queue.v1.Transfer.BySlotEntry
+	0,  // 11: ryuk.queue.v1.SlotSet.spec:type_name -> ryuk.queue.v1.QueueSpec
+	17, // 12: ryuk.queue.v1.HeldResponse.queues:type_name -> ryuk.queue.v1.HeldSlots
+	14, // 13: ryuk.queue.v1.Transfer.BySlotEntry.value:type_name -> ryuk.queue.v1.SlotMessages
+	1,  // 14: ryuk.queue.v1.QueueService.Enqueue:input_type -> ryuk.queue.v1.EnqueueRequest
+	3,  // 15: ryuk.queue.v1.QueueService.Dequeue:input_type -> ryuk.queue.v1.DequeueRequest
+	6,  // 16: ryuk.queue.v1.QueueService.Ack:input_type -> ryuk.queue.v1.AckRequest
+	7,  // 17: ryuk.queue.v1.QueueService.Nack:input_type -> ryuk.queue.v1.NackRequest
+	9,  // 18: ryuk.queue.v1.QueueService.Stats:input_type -> ryuk.queue.v1.StatsRequest
+	8,  // 19: ryuk.queue.v1.QueueService.StatsAll:input_type -> ryuk.queue.v1.Empty
+	9,  // 20: ryuk.queue.v1.QueueService.Drop:input_type -> ryuk.queue.v1.StatsRequest
+	16, // 21: ryuk.queue.v1.QueueService.PrepareMove:input_type -> ryuk.queue.v1.SlotSet
+	15, // 22: ryuk.queue.v1.QueueService.Absorb:input_type -> ryuk.queue.v1.Transfer
+	16, // 23: ryuk.queue.v1.QueueService.DiscardMove:input_type -> ryuk.queue.v1.SlotSet
+	16, // 24: ryuk.queue.v1.QueueService.AbortMove:input_type -> ryuk.queue.v1.SlotSet
+	10, // 25: ryuk.queue.v1.QueueService.Freeze:input_type -> ryuk.queue.v1.FreezeRequest
+	8,  // 26: ryuk.queue.v1.QueueService.Held:input_type -> ryuk.queue.v1.Empty
+	19, // 27: ryuk.queue.v1.QueueService.Subscribe:input_type -> ryuk.queue.v1.SubscribeRequest
+	8,  // 28: ryuk.queue.v1.QueueService.Health:input_type -> ryuk.queue.v1.Empty
+	2,  // 29: ryuk.queue.v1.QueueService.Enqueue:output_type -> ryuk.queue.v1.EnqueueResponse
+	5,  // 30: ryuk.queue.v1.QueueService.Dequeue:output_type -> ryuk.queue.v1.DequeueResponse
+	8,  // 31: ryuk.queue.v1.QueueService.Ack:output_type -> ryuk.queue.v1.Empty
+	8,  // 32: ryuk.queue.v1.QueueService.Nack:output_type -> ryuk.queue.v1.Empty
+	11, // 33: ryuk.queue.v1.QueueService.Stats:output_type -> ryuk.queue.v1.QueueStats
+	12, // 34: ryuk.queue.v1.QueueService.StatsAll:output_type -> ryuk.queue.v1.StatsAllResponse
+	8,  // 35: ryuk.queue.v1.QueueService.Drop:output_type -> ryuk.queue.v1.Empty
+	15, // 36: ryuk.queue.v1.QueueService.PrepareMove:output_type -> ryuk.queue.v1.Transfer
+	8,  // 37: ryuk.queue.v1.QueueService.Absorb:output_type -> ryuk.queue.v1.Empty
+	8,  // 38: ryuk.queue.v1.QueueService.DiscardMove:output_type -> ryuk.queue.v1.Empty
+	8,  // 39: ryuk.queue.v1.QueueService.AbortMove:output_type -> ryuk.queue.v1.Empty
+	15, // 40: ryuk.queue.v1.QueueService.Freeze:output_type -> ryuk.queue.v1.Transfer
+	18, // 41: ryuk.queue.v1.QueueService.Held:output_type -> ryuk.queue.v1.HeldResponse
+	20, // 42: ryuk.queue.v1.QueueService.Subscribe:output_type -> ryuk.queue.v1.WorkAvailable
+	21, // 43: ryuk.queue.v1.QueueService.Health:output_type -> ryuk.queue.v1.HealthResponse
+	29, // [29:44] is the sub-list for method output_type
+	14, // [14:29] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_queue_v1_queue_proto_init() }
@@ -1487,7 +1707,7 @@ func file_queue_v1_queue_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queue_v1_queue_proto_rawDesc), len(file_queue_v1_queue_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

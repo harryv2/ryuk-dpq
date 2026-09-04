@@ -14,16 +14,24 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
+// moveBackoff is how long to wait before re-reading placement and trying again.
+// The measured freeze during a handoff is ~2ms, so the first pause alone covers
+// the common case and the rest cover a slot large enough to take longer.
+var moveBackoff = []time.Duration{5 * time.Millisecond, 25 * time.Millisecond, 100 * time.Millisecond}
+
 // withOwner resolves the owner and runs the call. If the node says the queue
-// moved, the cached config is dropped and the call is retried once against the
-// new owner, so a migration is invisible to callers.
+// moved, the cached config is dropped and the call is retried against the new
+// owner, so a migration is invisible to callers.
 func (l *GatewayLogic) withOwner(
 	ctx context.Context,
 	cfg entity.QueueConfig,
 	slot int,
 	call func(addr string, spec entity.QueueSpec) error,
 ) error {
-	for attempt := 0; attempt < 2; attempt++ {
+	// A slot being handed over is held for a couple of milliseconds. Retrying
+	// immediately can land inside the same window, so each attempt waits a
+	// little longer than the last.
+	for attempt := 0; attempt < len(moveBackoff)+1; attempt++ {
 		_, addr, err := l.ownerAddr(ctx, cfg, slot)
 		if err != nil {
 			return err
@@ -32,8 +40,13 @@ func (l *GatewayLogic) withOwner(
 		if err == nil {
 			return nil
 		}
-		if enterr.CodeOf(err) != enterr.CodeMoved || attempt == 1 {
+		if enterr.CodeOf(err) != enterr.CodeMoved || attempt == len(moveBackoff) {
 			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(moveBackoff[attempt]):
 		}
 		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 		if cfg, err = l.config(ctx, cfg.Org, cfg.Name); err != nil {
@@ -80,7 +93,7 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 
 // slotCountFor is the queue's shape, decided at creation and never changed. It
 // has to agree with engine.SlotCountFor: if the gateway thinks a queue has more
-// slotsPlacementTableRepo than the node does, a message lands in a slot the dispatcher never
+// slots than the node does, a message lands in a slot the dispatcher never
 // looks at and is never delivered.
 func slotCountFor(distributed bool) int {
 	if distributed {

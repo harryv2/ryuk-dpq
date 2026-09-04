@@ -30,7 +30,7 @@ func (l *GatewayLogic) loadConfig(ctx context.Context, org, name string) (entity
 	return cfg, nil
 }
 
-// withPlacement fills in slot owners for the distributed queueTableRepo in a list.
+// withPlacement fills in slot owners for the distributed queues in a list.
 // Callers that only need names and settings skip this.
 func (l *GatewayLogic) withPlacement(ctx context.Context, cfgs []entity.QueueConfig) []entity.QueueConfig {
 	for i := range cfgs {
@@ -46,7 +46,3 @@ func (l *GatewayLogic) withPlacement(ctx context.Context, cfgs []entity.QueueCon
 	}
 	return cfgs
 }
-
-// assignOwner picks where a queue should go. Rendezvous hashing is a pure
-// function of the member list, so every gateway gets the same answer and
-// nothing has to be elected.

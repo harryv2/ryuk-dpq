@@ -105,8 +105,10 @@ type StatsAllResponse struct {
 	Queues []QueueStats `json:"queues"`
 }
 
-// TransferRequest carries a queue's contents to its new owner.
+// TransferRequest carries a queue's contents to its new owner. MoveID names the
+// handoff so a retry can be recognised and ignored rather than duplicating.
 type TransferRequest struct {
+	MoveID string                   `json:"moveId,omitempty"`
 	Spec   QueueSpec                `json:"spec"`
 	BySlot map[uint16][]WireMessage `json:"bySlot"`
 }
@@ -151,4 +153,18 @@ func FromWire(w WireMessage) *engine.Message {
 		m.DeliverAfter = *w.DeliverAfter
 	}
 	return m
+}
+
+// HeldSlots is what one node has for one queue, which the gateway compares
+// against placement to find slots a failed handoff stranded.
+type HeldSlots struct {
+	Org    string   `json:"org"`
+	Name   string   `json:"name"`
+	Slots  []uint16 `json:"slots"`
+	Frozen []uint16 `json:"frozen"`
+}
+
+type HeldResponse struct {
+	NodeID string      `json:"nodeId"`
+	Queues []HeldSlots `json:"queues"`
 }

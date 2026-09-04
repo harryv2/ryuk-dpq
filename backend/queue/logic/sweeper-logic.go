@@ -31,15 +31,26 @@ func (l *QueueLogic) Sweep() {
 func (l *QueueLogic) RunSweeper(stop <-chan struct{}) {
 	t := time.NewTicker(l.cfg.SweepEvery)
 	defer t.Stop()
+
+	// Acknowledged messages stay in the log until it is rewritten, so without
+	// this the files grow without bound. Far slower than the sweep: it rewrites
+	// whole files, and only what is still live needs to survive.
+	compact := time.NewTicker(compactEvery)
+	defer compact.Stop()
+
 	for {
 		select {
 		case <-stop:
 			return
+		case <-compact.C:
+			l.Compact()
 		case <-t.C:
 			l.Sweep()
 		}
 	}
 }
+
+const compactEvery = 5 * time.Minute
 
 // Freeze stops a queue serving and hands back everything it held, keyed by slot
 // so placement survives the move.

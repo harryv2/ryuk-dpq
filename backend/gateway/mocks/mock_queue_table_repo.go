@@ -143,3 +143,17 @@ func (mr *MockQueueTableRepoMockRecorder) SetState(ctx, org, name, state any) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetState", reflect.TypeOf((*MockQueueTableRepo)(nil).SetState), ctx, org, name, state)
 }
+
+// UpdateSettings mocks base method.
+func (m *MockQueueTableRepo) UpdateSettings(ctx context.Context, org, name string, s entity.QueueSettings) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSettings", ctx, org, name, s)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateSettings indicates an expected call of UpdateSettings.
+func (mr *MockQueueTableRepoMockRecorder) UpdateSettings(ctx, org, name, s any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSettings", reflect.TypeOf((*MockQueueTableRepo)(nil).UpdateSettings), ctx, org, name, s)
+}

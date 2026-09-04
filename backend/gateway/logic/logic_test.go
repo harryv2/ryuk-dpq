@@ -16,7 +16,7 @@ import (
 type deps struct {
 	queues  *mocks.MockQueueTableRepo
 	slots   *mocks.MockSlotPlacementTableRepo
-	nodes   *mocks.MockNodeRepo
+	nodes   *mocks.MockNodeGRPCRepo
 	members *mocks.MockMembershipRepo
 	series  *mocks.MockTimeseriesRepo
 }
@@ -27,7 +27,7 @@ func setup(t *testing.T) (*GatewayLogic, deps) {
 	d := deps{
 		queues:  mocks.NewMockQueueTableRepo(ctrl),
 		slots:   mocks.NewMockSlotPlacementTableRepo(ctrl),
-		nodes:   mocks.NewMockNodeRepo(ctrl),
+		nodes:   mocks.NewMockNodeGRPCRepo(ctrl),
 		members: mocks.NewMockMembershipRepo(ctrl),
 		series:  mocks.NewMockTimeseriesRepo(ctrl),
 	}
@@ -80,7 +80,7 @@ func TestCollectSumsDistributedQueueAcrossNodes(t *testing.T) {
 	d := deps{
 		queues:  mocks.NewMockQueueTableRepo(ctrl),
 		slots:   mocks.NewMockSlotPlacementTableRepo(ctrl),
-		nodes:   mocks.NewMockNodeRepo(ctrl),
+		nodes:   mocks.NewMockNodeGRPCRepo(ctrl),
 		members: mocks.NewMockMembershipRepo(ctrl),
 		series:  mocks.NewMockTimeseriesRepo(ctrl),
 	}

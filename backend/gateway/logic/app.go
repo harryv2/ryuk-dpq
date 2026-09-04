@@ -21,6 +21,7 @@ type GatewayLogicInterface interface {
 	CreateQueue(context.Context, entity.CreateQueueRequest) (entity.CreateQueueResponse, error)
 	DeleteQueue(context.Context, string, string) error
 	ListQueues(context.Context, string) ([]entity.QueueSummary, error)
+	UpdateQueue(context.Context, entity.UpdateQueueRequest) (entity.QueueSummary, error)
 
 	Enqueue(context.Context, entity.EnqueueRequest) (entity.EnqueueResponse, error)
 	Dequeue(context.Context, entity.DequeueRequest) (entity.DequeueResponse, error)
@@ -28,11 +29,13 @@ type GatewayLogicInterface interface {
 	Nack(context.Context, entity.NackRequest) error
 
 	Stats(context.Context, string, string) (entity.QueueStatsResponse, error)
-	Timeseries(context.Context, string, string, string) (entity.TimeseriesResponse, error)
-	Metrics(context.Context, string) ([]entity.QueueStatsResponse, error)
-	Cluster(context.Context) (entity.ClusterResponse, error)
+	GetTimeseriesMetrics(context.Context, string, string, string) (entity.TimeseriesResponse, error)
+	GetMetrics(context.Context, string) ([]entity.QueueStatsResponse, error)
+	GetClusterDetails(context.Context) (entity.ClusterResponse, error)
+	GetNodeDetails(context.Context, string, string) (entity.NodeDetailResponse, error)
 
 	Collect(context.Context)
+	Reconcile(context.Context)
 }
 
 type GatewayLogic struct {

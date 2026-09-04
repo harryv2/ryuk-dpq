@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useOrg } from "@/lib/org-context";
 import { api, ClusterNode, ClusterPlacement } from "@/lib/api";
 import { Empty, Skeleton, StatCard } from "@/lib/ui";
@@ -18,22 +19,36 @@ type QueueView = {
   org: string;
   totalSlots: number;
   placed: { node: string; addr: string; slots: number }[];
+  lost: number;
 };
 
 // One row per queue, not one per node: a distributed queue lives on several,
 // and counting it once per node is what made the old totals read too high.
-function byQueue(nodes: ClusterNode[], want: boolean): QueueView[] {
+// Slots whose owner is gone are folded in here too, so a queue that lost its
+// machines still has a row instead of silently disappearing.
+function byQueue(
+  nodes: ClusterNode[], unavailable: ClusterPlacement[], want: boolean,
+): QueueView[] {
   const out = new Map<string, QueueView>();
+  const view = (p: ClusterPlacement) => {
+    const k = `${p.org}/${p.queue}`;
+    if (!out.has(k)) {
+      out.set(k, { queue: p.queue, org: p.org, totalSlots: p.totalSlots, placed: [], lost: 0 });
+    }
+    return out.get(k)!;
+  };
+
   for (const n of nodes) {
     for (const p of n.queues) {
       if (p.distributed !== want) continue;
-      const k = `${p.org}/${p.queue}`;
-      if (!out.has(k)) {
-        out.set(k, { queue: p.queue, org: p.org, totalSlots: p.totalSlots, placed: [] });
-      }
-      out.get(k)!.placed.push({ node: n.id, addr: n.addr, slots: p.slots });
+      view(p).placed.push({ node: n.id, addr: n.addr, slots: p.slots });
     }
   }
+  for (const p of unavailable) {
+    if (p.distributed !== want) continue;
+    view(p).lost += p.slots;
+  }
+
   for (const v of out.values()) v.placed.sort((a, b) => b.slots - a.slots);
   return [...out.values()].sort((a, b) => a.queue.localeCompare(b.queue));
 }
@@ -41,6 +56,7 @@ function byQueue(nodes: ClusterNode[], want: boolean): QueueView[] {
 export default function Cluster() {
   const { org } = useOrg();
   const [nodes, setNodes] = useState<ClusterNode[]>([]);
+  const [unavailable, setUnavailable] = useState<ClusterPlacement[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -48,9 +64,10 @@ export default function Cluster() {
     let alive = true;
     const load = async () => {
       try {
-        const n = await api.cluster(org.token);
+        const c = await api.cluster(org.token);
         if (!alive) return;
-        setNodes(n);
+        setNodes(c.nodes);
+        setUnavailable(c.unavailable);
         setErr("");
       } catch (e: any) {
         if (alive) setErr(e.message);
@@ -66,8 +83,9 @@ export default function Cluster() {
     };
   }, [org.token]);
 
-  const distributed = byQueue(nodes, true);
-  const single = byQueue(nodes, false);
+  const distributed = byQueue(nodes, unavailable, true);
+  const single = byQueue(nodes, unavailable, false);
+  const lostSlots = unavailable.reduce((n, p) => n + p.slots, 0);
   const idle = nodes.filter((n) => n.queues.length === 0);
 
   return (
@@ -100,10 +118,17 @@ export default function Cluster() {
           label="Single-node queues" value={single.length} loading={loading}
           hint="each placed whole on one node"
         />
-        <StatCard
-          label="Idle nodes" value={idle.length} loading={loading}
-          hint="registered, holding nothing"
-        />
+        {lostSlots > 0 ? (
+          <StatCard
+            label="Slots unavailable" value={lostSlots} loading={loading}
+            hint="owner is no longer registered"
+          />
+        ) : (
+          <StatCard
+            label="Idle nodes" value={idle.length} loading={loading}
+            hint="registered, holding nothing"
+          />
+        )}
       </div>
 
       <Section
@@ -117,17 +142,27 @@ export default function Cluster() {
           <div className="card" key={q.org + q.queue}>
             <div className="card-head">
               <h2 className="mono">{q.queue}</h2>
-              <span className="tag dist">
-                {q.placed.length} node{q.placed.length > 1 ? "s" : ""}
+              <span className={q.lost > 0 ? "tag high" : "tag dist"}>
+                {q.placed.length} node{q.placed.length === 1 ? "" : "s"}
               </span>
             </div>
-            <SlotBar placed={q.placed} total={q.totalSlots} />
+            <SlotBar placed={q.placed} total={q.totalSlots} lost={q.lost} />
             <table style={{ marginTop: 14 }}>
               <tbody>
+                {q.lost > 0 && (
+                  <tr>
+                    <td style={{ padding: "8px 0" }}>
+                      <span className="tag high">machines gone</span>
+                    </td>
+                    <td className="num muted" style={{ padding: "8px 0" }}>
+                      {q.lost} / {q.totalSlots} slots
+                    </td>
+                  </tr>
+                )}
                 {q.placed.map((p) => (
                   <tr key={p.node}>
                     <td className="mono" style={{ padding: "8px 0" }}>
-                      {p.node}
+                      <Link href={`/cluster/node?id=${encodeURIComponent(p.node)}`}>{p.node}</Link>
                       <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
                         {containerOf(p.addr)}
                       </span>
@@ -156,10 +191,19 @@ export default function Cluster() {
               <h2 className="mono">{q.queue}</h2>
               <span className="tag plain">{q.totalSlots} slots</span>
             </div>
-            <p className="muted mono" style={{ margin: 0 }}>{q.placed[0]?.node}</p>
-            <p className="muted mono" style={{ margin: "4px 0 0", fontSize: 12 }}>
-              {q.placed[0]?.addr}
-            </p>
+            {q.placed[0] ? (
+              <>
+                <p className="muted mono" style={{ margin: 0 }}>{q.placed[0].node}</p>
+                <p className="muted mono" style={{ margin: "4px 0 0", fontSize: 12 }}>
+                  {q.placed[0].addr}
+                </p>
+              </>
+            ) : (
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                Its owner is not registered, so the queue is unavailable until that
+                machine comes back.
+              </p>
+            )}
           </div>
         ))}
       </Section>
@@ -200,7 +244,9 @@ export default function Cluster() {
               const container = containerOf(n.addr);
               return (
                 <tr key={n.id}>
-                  <td className="mono">{n.id}</td>
+                  <td className="mono">
+                    <Link href={`/cluster/node?id=${encodeURIComponent(n.id)}`}>{n.id}</Link>
+                  </td>
                   <td className="mono muted">{container}</td>
                   <td className="num">{n.queues.length}</td>
                   <td><span className="tag ok">live</span></td>
@@ -252,10 +298,13 @@ function Section({
   );
 }
 
-// How much of the queue each node holds, at a glance.
 const SHADES = ["var(--accent)", "var(--low)", "var(--ok)", "var(--medium)", "var(--high)"];
 
-function SlotBar({ placed, total }: { placed: { node: string; slots: number }[]; total: number }) {
+function SlotBar({
+  placed, total, lost = 0,
+}: {
+  placed: { node: string; slots: number }[]; total: number; lost?: number;
+}) {
   const held = placed.reduce((n, p) => n + p.slots, 0);
   return (
     <>
@@ -271,12 +320,19 @@ function SlotBar({ placed, total }: { placed: { node: string; slots: number }[];
             }}
           />
         ))}
-        {held < total && (
-          <div style={{ flex: 1, background: "var(--border)" }} title={`${total - held} slots not yet used`} />
+        {lost > 0 && (
+          <div
+            style={{ width: `${(lost / total) * 100}%`, background: "var(--high)", opacity: 0.35 }}
+            title={`${lost} slots on machines that are gone`}
+          />
+        )}
+        {held + lost < total && (
+          <div style={{ flex: 1, background: "var(--border)" }} title={`${total - held - lost} slots not yet used`} />
         )}
       </div>
       <p className="muted" style={{ margin: "8px 0 0", fontSize: 12 }}>
         {held} of {total} slots placed
+        {lost > 0 && ` · ${lost} on machines that are gone`}
       </p>
     </>
   );

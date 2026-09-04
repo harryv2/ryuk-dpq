@@ -14,7 +14,7 @@ func (h *Handlers) Stats(w http.ResponseWriter, r *http.Request, org string) {
 }
 
 func (h *Handlers) Metrics(w http.ResponseWriter, r *http.Request, org string) {
-	out, err := h.app.Metrics(r.Context(), org)
+	out, err := h.app.GetMetrics(r.Context(), org)
 	if err != nil {
 		writeErr(w, err)
 		return

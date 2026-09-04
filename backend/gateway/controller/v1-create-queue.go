@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/harryv2/ryuk-dpq/backend/constants"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
@@ -50,20 +51,43 @@ func parseAndValidateCreateQueueRequest(r *http.Request, org string) (entity.Cre
 	if req.MaxDepth < 0 {
 		return req, enterr.Invalid("maxDepth must not be negative")
 	}
+	if req.PlacementWidth != 0 && !req.Distributed {
+		return req, enterr.Invalid("placementWidth only applies to a distributed queue")
+	}
+	if req.Distributed {
+		if req.PlacementWidth == 0 {
+			req.PlacementWidth = constants.DefaultPlacementWidth
+		}
+		if req.PlacementWidth < constants.MinPlacementWidth || req.PlacementWidth > constants.MaxPlacementWidth {
+			return req, enterr.Invalid("placementWidth must be between %d and %d",
+				constants.MinPlacementWidth, constants.MaxPlacementWidth)
+		}
+	}
 
+	if req.Settings, err = settingsFrom(req); err != nil {
+		return req, err
+	}
+	return req, nil
+}
+
+// settingsFrom parses and defaults the settings both creating and updating a
+// queue accept, so the two cannot drift apart.
+func settingsFrom(req entity.CreateQueueRequest) (entity.QueueSettings, error) {
+	var err error
 	s := entity.QueueSettings{
 		StarvationReserve: req.StarvationReserve,
 		MaxDepth:          req.MaxDepth,
 		DeadLetterQueue:   req.DeadLetterQueue,
+		PlacementWidth:    req.PlacementWidth,
 	}
 	if s.VisibilityTimeout, err = optDuration("visibilityTimeout", req.VisibilityTimeout); err != nil {
-		return req, err
+		return s, err
 	}
 	if s.DefaultTTL, err = optDuration("defaultTtl", req.DefaultTTL); err != nil {
-		return req, err
+		return s, err
 	}
 	if s.StarvationThreshold, err = optDuration("starvationThreshold", req.StarvationThreshold); err != nil {
-		return req, err
+		return s, err
 	}
 
 	if s.VisibilityTimeout == 0 {
@@ -84,10 +108,9 @@ func parseAndValidateCreateQueueRequest(r *http.Request, org string) (entity.Cre
 	// A threshold at or above the expiry turns the queue into something that
 	// silently deletes low-priority work.
 	if s.DefaultTTL > 0 && s.StarvationThreshold >= s.DefaultTTL {
-		return req, enterr.Invalid(
+		return s, enterr.Invalid(
 			"starvationThreshold must be below defaultTtl, or messages can expire while waiting")
 	}
 
-	req.Settings = s
-	return req, nil
+	return s, nil
 }

@@ -11,7 +11,6 @@ import { useWidth } from "@/lib/measure";
 type Band = "low" | "medium" | "high";
 type Line = Band | "total";
 
-// One chart point, whichever source it came from.
 type SeriesPoint = { t: number; v: number };
 
 // Prometheus returns a series per label value; the name is empty when a metric
@@ -28,8 +27,6 @@ type Point = {
   inFlight: number; ageSeconds: number;
 };
 
-// Rates come from the gateway, which derives them from two collections; a node
-// only reports totals.
 // Axis labels on the rate charts, matching the cards above them.
 function perSec(v: number): string {
   return v < 10 ? v.toFixed(1) : String(Math.round(v));

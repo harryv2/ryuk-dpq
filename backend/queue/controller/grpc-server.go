@@ -21,7 +21,6 @@ func New(app logic.QueueLogicInterface, log *slog.Logger) *Server {
 	return &Server{app: app, log: log}
 }
 
-// toStatus maps the logic layer's error codes onto gRPC codes.
 func toStatus(err error) error {
 	if err == nil {
 		return nil

@@ -7,7 +7,6 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
-// One cache, each kind of value under its own prefix.
 const (
 	prefixQueue     = "queue:"      // org/name       -> QueueConfig
 	prefixStats     = "stats:"      // org/name       -> NodeStats, summed

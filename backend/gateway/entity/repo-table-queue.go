@@ -24,6 +24,10 @@ type QueueSettings struct {
 	StarvationReserve   float64       `json:"starvationReserve"`
 	MaxDepth            int64         `json:"maxDepth"`
 	DeadLetterQueue     string        `json:"deadLetterQueue,omitempty"`
+	// PlacementWidth is how many machines a distributed queue may use. Fixed at
+	// creation: changing it re-derives the candidate set and would move most of
+	// the queue.
+	PlacementWidth int `json:"placementWidth,omitempty"`
 }
 
 // QueueConfig is the stored record. OwnerNode says where the queue IS, which is
@@ -44,13 +48,15 @@ type QueueConfig struct {
 	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
-// QueueTableRepo owns the queues table.
 type QueueTableRepo interface {
 	Create(ctx context.Context, cfg QueueConfig) (QueueConfig, bool, error)
 	Get(ctx context.Context, org, name string) (QueueConfig, error)
 	ListByOrg(ctx context.Context, org string) ([]QueueConfig, error)
 	ListAll(ctx context.Context) ([]QueueConfig, error)
 	SetOwner(ctx context.Context, org, name, owner string, generation uint64) error
+	// UpdateSettings replaces the tunable settings. Shape is not tunable, so it
+	// cannot change what the caller chose at creation.
+	UpdateSettings(ctx context.Context, org, name string, s QueueSettings) error
 	// SetState only moves into migrating from active, so two gateways cannot
 	// both start the same migration.
 	SetState(ctx context.Context, org, name string, state QueueState) error

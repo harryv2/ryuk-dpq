@@ -25,13 +25,12 @@ var (
 	opts   = godog.Options{Output: colors.Colored(os.Stdout), Format: "pretty", Strict: true}
 )
 
-func init() {
-	godog.BindCommandLineFlags("godog.", &opts)
-}
-
 func TestMain(m *testing.M) {
 	flag.Parse()
 	opts.Paths = []string{"features"}
+	// godog binds its own flags to pflag, which "go test" does not parse, so
+	// the tag filter comes from the environment instead.
+	opts.Tags = os.Getenv("RYUK_IT_TAGS")
 
 	if testing.Short() {
 		fmt.Println("skipping integration suite: -short")

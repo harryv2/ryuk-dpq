@@ -87,6 +87,7 @@ type CreateQueue struct {
 	DefaultTTL          string  `json:"defaultTtl,omitempty"`
 	StarvationThreshold string  `json:"starvationThreshold,omitempty"`
 	DeadLetterQueue     string  `json:"deadLetterQueue,omitempty"`
+	PlacementWidth      int     `json:"placementWidth,omitempty"`
 }
 
 type QueueSummary struct {

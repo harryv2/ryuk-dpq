@@ -2,6 +2,8 @@ package logic
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
@@ -10,9 +12,10 @@ import (
 const (
 	stabilityWindow = 15 * time.Second
 	maxConcurrent   = 2
+	sweepEvery      = 60 * time.Second
 )
 
-// RunRebalancer moves queueTableRepo onto machines that join. Placement is a pure
+// RunRebalancer moves queues onto machines that join. Placement is a pure
 // function of the member list, so working out what should move needs no
 // coordination; the only thing that needs care is not doing it twice.
 func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
@@ -20,14 +23,26 @@ func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 
+	// A membership change is the fast path, but it is only an edge: a queue
+	// that missed its window -- locked, or the gateway restarted -- would stay
+	// unbalanced until something else moved. This sweep is the level.
+	sweep := time.NewTicker(sweepEvery)
+	defer sweep.Stop()
+
+	// Taken once: every call registers a listener, so calling it inside the
+	// loop would add one per iteration.
+	changed := l.membershipRepo.Changed()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-l.membershipRepo.Changed():
+		case <-changed:
 			// A container in a crash loop would otherwise move data continuously,
 			// which hurts far more than the imbalance it is correcting.
 			settleAt = time.Now().Add(stabilityWindow)
+		case <-sweep.C:
+			l.Rebalance(ctx)
 		case <-tick.C:
 			if settleAt.IsZero() || time.Now().Before(settleAt) {
 				continue
@@ -45,7 +60,7 @@ func (l *GatewayLogic) Rebalance(ctx context.Context) {
 	}
 	cfgs, err := l.queueTableRepo.ListAll(ctx)
 	if err != nil {
-		l.log.Warn("rebalance: list queueTableRepo", "err", err)
+		l.log.Warn("rebalance: list queues", "err", err)
 		return
 	}
 	cfgs = l.withPlacement(ctx, cfgs)
@@ -80,16 +95,37 @@ func (l *GatewayLogic) Rebalance(ctx context.Context) {
 		}
 	}
 	if moved > 0 {
-		l.log.Info("rebalanced", "queueTableRepo", moved, "membershipRepo", len(members))
+		l.log.Info("rebalanced", "queues", moved, "members", len(members))
 	}
 }
 
-// rebalanceSlots moves the slotsPlacementTableRepo of a distributed queue that no longer hash to
+func (l *GatewayLogic) abort(ctx context.Context, addr string, spec entity.QueueSpec, slots []uint16, moveID string) {
+	if err := l.nodesGRPCRepo.AbortMove(ctx, addr, spec, slots, moveID); err != nil {
+		l.log.Warn("move: abort failed, the slots stay frozen until the reconciler thaws them",
+			"queue", spec.Name, "err", err)
+	}
+}
+
+// newMoveID names one handoff so the receiving node can tell a retry from a
+// second move of the same slots.
+func newMoveID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "move"
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// rebalanceSlots moves the slots of a distributed queue that no longer hash to
 // their current owner. Slots are grouped by where they are moving from and to,
 // so one handoff carries everything going the same way.
 func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfig, members []entity.Member) bool {
 	type route struct{ from, to string }
 	moves := map[route][]uint16{}
+
+	// The same candidate set creation used, or a rebalance would scatter the
+	// queue across machines its width was meant to exclude.
+	candidates := entity.CandidatesFor(key(cfg.Org, cfg.Name), members, cfg.Settings.PlacementWidth)
 
 	for slot := 0; slot < slotCountFor(cfg.Distributed); slot++ {
 		current := cfg.SlotOwners[uint16(slot)]
@@ -97,7 +133,7 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 			continue
 		}
 		want, ok := entity.OwnerFor(
-			entity.OwnerKey(cfg.Org, cfg.Name, slot, true), members)
+			entity.OwnerKey(cfg.Org, cfg.Name, slot, true), candidates)
 		if !ok || want.ID == current {
 			continue
 		}
@@ -128,24 +164,51 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 			continue
 		}
 		spec := cfg.Spec()
-		transfer, err := l.nodesGRPCRepo.Freeze(ctx, from.Addr, spec, slots)
+		moveID := newMoveID()
+
+		// 1. Hold the slots and take copies. Nothing is removed yet, so a
+		//    failure anywhere below leaves the old owner able to serve.
+		transfer, err := l.nodesGRPCRepo.PrepareMove(ctx, from.Addr, spec, slots, moveID)
 		if err != nil {
-			l.log.Warn("rebalance slotsPlacementTableRepo: freeze", "queue", cfg.Name, "err", err)
+			l.log.Warn("move: prepare", "queue", cfg.Name, "err", err)
 			continue
 		}
 		transfer.Spec = spec
 		transfer.Spec.Generation = nextGen
+		transfer.MoveID = moveID
+
+		// 2. Put them on the new owner, which writes them to its log before
+		//    they become visible. Placement still names the old owner, so
+		//    nothing is asking the new one for them yet.
 		if err := l.nodesGRPCRepo.Absorb(ctx, to.Addr, transfer); err != nil {
-			l.log.Warn("rebalance slotsPlacementTableRepo: absorb", "queue", cfg.Name, "err", err)
+			l.log.Warn("move: absorb, putting the slots back", "queue", cfg.Name, "err", err)
+			l.abort(ctx, from.Addr, spec, slots, moveID)
 			continue
 		}
+
+		// 3. The commit. From here the new owner serves them.
+		recorded := true
 		for _, slot := range slots {
 			if err := l.slotsPlacementTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, slot, r.to, nextGen); err != nil {
-				l.log.Warn("rebalance slotsPlacementTableRepo: record", "queue", cfg.Name, "slot", slot, "err", err)
+				l.log.Warn("move: record", "queue", cfg.Name, "slot", slot, "err", err)
+				recorded = false
 			}
 		}
-		l.log.Info("moved slotsPlacementTableRepo", "org", cfg.Org, "queue", cfg.Name,
-			"slotsPlacementTableRepo", len(slots), "from", r.from, "to", r.to)
+		if !recorded {
+			// Placement is half written. Leave both copies alone; the
+			// reconciler compares what nodes hold against placement and
+			// finishes or undoes it.
+			l.log.Warn("move: placement incomplete, leaving it to the reconciler",
+				"queue", cfg.Name, "move", moveID)
+			continue
+		}
+
+		// 4. Only now is it safe for the old owner to let go.
+		if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, spec, slots, moveID); err != nil {
+			l.log.Warn("move: discard, the reconciler will clean up", "queue", cfg.Name, "err", err)
+		}
+		l.log.Info("moved slots", "org", cfg.Org, "queue", cfg.Name,
+			"slots", len(slots), "from", r.from, "to", r.to)
 		done++
 	}
 	return done > 0

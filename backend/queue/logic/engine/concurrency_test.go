@@ -131,21 +131,17 @@ func TestConcurrentProducersAndConsumers(t *testing.T) {
 	}
 	consumed.Wait()
 
-	// 1. everything reached exactly one end state
 	if int(ackedCount.Load()) != total {
 		t.Fatalf("acked %d, want %d", ackedCount.Load(), total)
 	}
-	// 2. nothing acknowledged twice
 	for id, n := range tr.acked {
 		if n != 1 {
 			t.Fatalf("message %s acked %d times", id, n)
 		}
 	}
-	// 3. nothing left in flight
 	if len(tr.inFlight) != 0 {
 		t.Fatalf("%d messages still in flight", len(tr.inFlight))
 	}
-	// 4. group order preserved
 	for g, seqs := range tr.groupSeen {
 		for i := 1; i < len(seqs); i++ {
 			if seqs[i] < seqs[i-1] {
@@ -153,7 +149,6 @@ func TestConcurrentProducersAndConsumers(t *testing.T) {
 			}
 		}
 	}
-	// 5. the queue is empty
 	if s := q.Stats(); s.ReadyTotal() != 0 || s.InFlight != 0 {
 		t.Fatalf("queue not drained: %+v", s)
 	}

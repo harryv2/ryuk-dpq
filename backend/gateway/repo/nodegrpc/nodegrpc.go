@@ -72,7 +72,6 @@ func (r *Repo) failed(addr string, err error) error {
 	return fromStatus(err)
 }
 
-// fromStatus maps gRPC codes back onto the gateway's error codes.
 func fromStatus(err error) error {
 	if err == nil {
 		return nil
@@ -238,7 +237,13 @@ func (r *Repo) Freeze(ctx context.Context, addr string, spec entity.QueueSpec, s
 	if err != nil {
 		return entity.Transfer{}, r.failed(addr, err)
 	}
-	t := entity.Transfer{Spec: spec, BySlot: map[uint16][]entity.WireMessage{}}
+	t := transferFrom(out)
+	t.Spec = spec
+	return t, nil
+}
+
+func transferFrom(out *pb.Transfer) entity.Transfer {
+	t := entity.Transfer{BySlot: map[uint16][]entity.WireMessage{}}
 	for slot, sm := range out.BySlot {
 		msgs := make([]entity.WireMessage, 0, len(sm.Messages))
 		for _, m := range sm.Messages {
@@ -246,7 +251,7 @@ func (r *Repo) Freeze(ctx context.Context, addr string, spec entity.QueueSpec, s
 		}
 		t.BySlot[uint16(slot)] = msgs
 	}
-	return t, nil
+	return t
 }
 
 func (r *Repo) Absorb(ctx context.Context, addr string, t entity.Transfer) error {
@@ -254,7 +259,7 @@ func (r *Repo) Absorb(ctx context.Context, addr string, t entity.Transfer) error
 	if err != nil {
 		return err
 	}
-	req := &pb.Transfer{Spec: specTo(t.Spec), BySlot: map[uint32]*pb.SlotMessages{}}
+	req := &pb.Transfer{Spec: specTo(t.Spec), MoveId: t.MoveID, BySlot: map[uint32]*pb.SlotMessages{}}
 	for slot, msgs := range t.BySlot {
 		sm := &pb.SlotMessages{Messages: make([]*pb.WireMessage, 0, len(msgs))}
 		for _, m := range msgs {
@@ -326,4 +331,81 @@ func wireFrom(w *pb.WireMessage) entity.WireMessage {
 		m.DeliverAfter = &t
 	}
 	return m
+}
+
+func (r *Repo) PrepareMove(
+	ctx context.Context, addr string, spec entity.QueueSpec, slots []uint16, moveID string,
+) (entity.Transfer, error) {
+	c, err := r.client(addr)
+	if err != nil {
+		return entity.Transfer{}, err
+	}
+	out, err := c.PrepareMove(ctx, &pb.SlotSet{
+		Spec: specTo(spec), Slots: slotsTo(slots), MoveId: moveID,
+	})
+	if err != nil {
+		return entity.Transfer{}, r.failed(addr, err)
+	}
+	return transferFrom(out), nil
+}
+
+func (r *Repo) DiscardMove(
+	ctx context.Context, addr string, spec entity.QueueSpec, slots []uint16, moveID string,
+) error {
+	c, err := r.client(addr)
+	if err != nil {
+		return err
+	}
+	_, err = c.DiscardMove(ctx, &pb.SlotSet{
+		Spec: specTo(spec), Slots: slotsTo(slots), MoveId: moveID,
+	})
+	return r.failed(addr, err)
+}
+
+func (r *Repo) AbortMove(
+	ctx context.Context, addr string, spec entity.QueueSpec, slots []uint16, moveID string,
+) error {
+	c, err := r.client(addr)
+	if err != nil {
+		return err
+	}
+	_, err = c.AbortMove(ctx, &pb.SlotSet{
+		Spec: specTo(spec), Slots: slotsTo(slots), MoveId: moveID,
+	})
+	return r.failed(addr, err)
+}
+
+func (r *Repo) Held(ctx context.Context, addr string) (entity.HeldResponse, error) {
+	c, err := r.client(addr)
+	if err != nil {
+		return entity.HeldResponse{}, err
+	}
+	out, err := c.Held(ctx, &pb.Empty{})
+	if err != nil {
+		return entity.HeldResponse{}, r.failed(addr, err)
+	}
+	held := entity.HeldResponse{NodeID: out.NodeId}
+	for _, q := range out.Queues {
+		held.Queues = append(held.Queues, entity.HeldSlots{
+			Org: q.Org, Name: q.Queue,
+			Slots: slotsFrom(q.Slots), Frozen: slotsFrom(q.Frozen),
+		})
+	}
+	return held, nil
+}
+
+func slotsTo(in []uint16) []uint32 {
+	out := make([]uint32, 0, len(in))
+	for _, v := range in {
+		out = append(out, uint32(v))
+	}
+	return out
+}
+
+func slotsFrom(in []uint32) []uint16 {
+	out := make([]uint16, 0, len(in))
+	for _, v := range in {
+		out = append(out, uint16(v))
+	}
+	return out
 }

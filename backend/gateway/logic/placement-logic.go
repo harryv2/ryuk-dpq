@@ -10,14 +10,19 @@ import (
 // assignOwner picks where a queue should go. Rendezvous hashing is a pure
 // function of the member list, so every gateway gets the same answer and
 // nothing has to be elected.
-func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool) (entity.Member, error) {
+func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool, width int) (entity.Member, error) {
 	members := l.membershipRepo.Members()
 	if len(members) == 0 {
-		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodesGRPCRepo available")
+		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodes available")
+	}
+	// A distributed queue is confined to its candidate set. A single-node queue
+	// is placed whole, so it may land anywhere.
+	if distributed {
+		members = entity.CandidatesFor(key(org, name), members, width)
 	}
 	m, ok := entity.OwnerFor(entity.OwnerKey(org, name, slot, distributed), members)
 	if !ok {
-		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodesGRPCRepo available")
+		return entity.Member{}, enterr.New(enterr.CodeExhausted, "no nodes available")
 	}
 	return m, nil
 }
@@ -40,8 +45,7 @@ func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, sl
 			"queue owner "+stored+" is not available")
 	}
 
-	// first use: pick an owner and record it
-	m, err := l.assignOwner(cfg.Org, cfg.Name, slot, cfg.Distributed)
+	m, err := l.assignOwner(cfg.Org, cfg.Name, slot, cfg.Distributed, cfg.Settings.PlacementWidth)
 	if err != nil {
 		return "", "", err
 	}

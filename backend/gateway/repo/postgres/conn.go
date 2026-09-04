@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS slot_placement (
 );
 
 CREATE INDEX IF NOT EXISTS queues_owner_idx ON queues (owner_node);
+
+-- Who is migrating a queue and since when. Without this a gateway that dies
+-- mid-migration leaves the queue in 'migrating' forever, and no other gateway
+-- can ever take it over.
+ALTER TABLE queues ADD COLUMN IF NOT EXISTS migrating_by    TEXT;
+ALTER TABLE queues ADD COLUMN IF NOT EXISTS migrating_since TIMESTAMPTZ;
 `
 
 // DSN is a named type so the wire graph can tell it from any other string.

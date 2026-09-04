@@ -51,6 +51,14 @@ func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 		return enterr.Internal("open queue", err)
 	}
 
+	// A handoff may be retried after a timeout or by the reconciler. Absorbing
+	// the same one twice would duplicate every message in it, so the id is
+	// remembered and a repeat is a success that does nothing.
+	if req.MoveID != "" && !l.claimMove(req.Spec.Key(), req.MoveID) {
+		l.log.Info("absorb: already applied", "queue", req.Spec.Name, "move", req.MoveID)
+		return nil
+	}
+
 	bySlot := make(map[uint16][]*engine.Message, len(req.BySlot))
 	for slot, wire := range req.BySlot {
 		msgs := make([]*engine.Message, 0, len(wire))
@@ -78,4 +86,91 @@ func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 	return nil
 }
 
-// Compact rewrites each queue's log to hold only what is still live.
+// claimMove records a handoff id and reports whether this is the first time it
+// has been seen. Kept in memory: a restart replays the log, and the log holds
+// what was absorbed, so a repeat after a restart is already reflected there.
+func (l *QueueLogic) claimMove(key engine.QueueKey, moveID string) bool {
+	l.moveMu.Lock()
+	defer l.moveMu.Unlock()
+	if l.appliedMoves == nil {
+		l.appliedMoves = map[string]bool{}
+	}
+	k := key.String() + "/" + moveID
+	if l.appliedMoves[k] {
+		return false
+	}
+	l.appliedMoves[k] = true
+	return true
+}
+
+// PrepareMove holds the named slots out of service and returns copies of what
+// they hold. Nothing is removed: if the handoff fails, AbortMove puts this node
+// straight back to serving them.
+func (l *QueueLogic) PrepareMove(spec entity.QueueSpec, slots []uint16) (map[uint16][]entity.WireMessage, error) {
+	lq, ok := l.lookup(spec.Key())
+	if !ok {
+		return map[uint16][]entity.WireMessage{}, nil // nothing here to move
+	}
+	bySlot := lq.q.FreezeSlots(slots)
+
+	out := make(map[uint16][]entity.WireMessage, len(bySlot))
+	for slot, msgs := range bySlot {
+		wire := make([]entity.WireMessage, 0, len(msgs))
+		for _, m := range msgs {
+			wire = append(wire, entity.ToWire(m))
+		}
+		out[slot] = wire
+	}
+	return out, nil
+}
+
+// DiscardMove removes slots this node no longer owns. Called only after the new
+// owner is serving them, so it is the point of no return.
+func (l *QueueLogic) DiscardMove(spec entity.QueueSpec, slots []uint16) error {
+	lq, ok := l.lookup(spec.Key())
+	if !ok {
+		return nil // already gone
+	}
+	n := lq.q.DropSlots(slots)
+	for _, slot := range slots {
+		if err := lq.wal.Compact(slot, nil); err != nil {
+			l.log.Warn("discard: truncate log", "queue", spec.Name, "slot", slot, "err", err)
+		}
+	}
+	l.log.Info("discarded moved slots", "org", spec.Org, "queue", spec.Name,
+		"slots", len(slots), "messages", n)
+	return nil
+}
+
+// AbortMove puts frozen slots back into service. The handoff is off; this node
+// still holds everything.
+func (l *QueueLogic) AbortMove(spec entity.QueueSpec, slots []uint16) error {
+	lq, ok := l.lookup(spec.Key())
+	if !ok {
+		return nil
+	}
+	lq.q.ThawSlots(slots)
+	l.log.Info("aborted move", "org", spec.Org, "queue", spec.Name, "slots", len(slots))
+	return nil
+}
+
+// HeldSlots reports what this node actually has, so the gateway can compare it
+// against placement and repair whatever a failed handoff left behind.
+func (l *QueueLogic) HeldSlots() entity.HeldResponse {
+	l.mu.RLock()
+	snapshot := make(map[engine.QueueKey]*liveQueue, len(l.queues))
+	for k, v := range l.queues {
+		snapshot[k] = v
+	}
+	l.mu.RUnlock()
+
+	out := entity.HeldResponse{NodeID: l.cfg.NodeID}
+	for k, lq := range snapshot {
+		out.Queues = append(out.Queues, entity.HeldSlots{
+			Org: k.Org, Name: k.Name,
+			Slots:  lq.q.HeldSlots(),
+			Frozen: lq.q.FrozenSlots(),
+		})
+	}
+	return out
+}

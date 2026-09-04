@@ -14,6 +14,11 @@ func (l *QueueLogic) queueFor(spec entity.QueueSpec) (*liveQueue, error) {
 	lq, ok := l.queues[key]
 	l.mu.RUnlock()
 	if ok {
+		// The spec travels with every request, so a settings change reaches the
+		// node on the next call rather than needing to be pushed to it.
+		if lq.q.Reconfigure(spec.EngineConfig()) {
+			l.log.Info("queue reconfigured", "org", key.Org, "queue", key.Name)
+		}
 		return lq, nil
 	}
 

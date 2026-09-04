@@ -4,7 +4,6 @@ import "github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
 
 //go:generate mockgen -source=repo-wal.go -destination=../mocks/mock_wal_repo.go -package=mocks
 
-// WALRepo is one queue's write-ahead log, one file per slot.
 type WALRepo interface {
 	engine.Journal
 	Replay() (map[uint16][]*engine.Message, error)

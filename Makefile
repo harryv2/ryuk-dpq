@@ -100,7 +100,7 @@ integration-fast:
 
 # make integration-tags TAGS=@failure
 integration-tags:
-	cd integration && go test -v -timeout 25m -godog.tags=$(TAGS)
+	cd integration && RYUK_IT_TAGS=$(TAGS) go test -v -timeout 25m
 
 # The engine must stay free of everything outside the standard library, and the
 # layers must not reach past each other. This is the rule that erodes first.

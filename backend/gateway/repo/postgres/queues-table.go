@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
@@ -16,9 +18,18 @@ const queueColumns = `org_id, name, settings, distributed, state,
 
 type QueuesTable struct {
 	wrapper *DBWrapper
+	// holder identifies this gateway in the migration lock, so a lock left by a
+	// process that died can be told from one still in use.
+	holder string
 }
 
-func NewQueuesTable(w *DBWrapper) *QueuesTable { return &QueuesTable{wrapper: w} }
+func NewQueuesTable(w *DBWrapper) *QueuesTable {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "gateway"
+	}
+	return &QueuesTable{wrapper: w, holder: fmt.Sprintf("%s/%d", host, os.Getpid())}
+}
 
 // Create returns the existing row when the name is taken. The primary key does
 // the concurrency work: two gateways creating the same queue cannot both win.
@@ -93,19 +104,39 @@ func (t *QueuesTable) SetOwner(ctx context.Context, org, name, owner string, gen
 	return err
 }
 
+// migrationLease is how long a gateway may hold a queue in 'migrating' before
+// another one may take it over. Long enough that a slow but live migration is
+// never stolen; short enough that a dead gateway does not strand a queue.
+const migrationLease = 2 * time.Minute
+
 // SetState guards the move into migrating: whichever gateway wins the update
 // owns the migration, and the others get a conflict and skip it. This is the
 // only coordination between gateways in the system.
 func (t *QueuesTable) SetState(ctx context.Context, org, name string, state entity.QueueState) error {
-	q := `UPDATE queues SET state=$3, updated_at=now() WHERE org_id=$1 AND name=$2`
 	if state == entity.StateMigrating {
-		q += ` AND state='active'`
+		return t.takeMigrationLock(ctx, org, name)
 	}
-	tag, err := t.wrapper.Pool.Exec(ctx, q, org, name, string(state))
+	q := `UPDATE queues SET state=$3, migrating_by=NULL, migrating_since=NULL, updated_at=now()
+	       WHERE org_id=$1 AND name=$2`
+	_, err := t.wrapper.Pool.Exec(ctx, q, org, name, string(state))
+	return err
+}
+
+// takeMigrationLock claims the right to migrate this queue. Only one gateway can
+// hold it, and a lock left behind by a gateway that died is reclaimed once its
+// lease expires -- otherwise the queue would never rebalance again.
+func (t *QueuesTable) takeMigrationLock(ctx context.Context, org, name string) error {
+	const q = `
+		UPDATE queues
+		   SET state='migrating', migrating_by=$3, migrating_since=now(), updated_at=now()
+		 WHERE org_id=$1 AND name=$2
+		   AND (state='active'
+		        OR (state='migrating' AND migrating_since < now() - $4::interval))`
+	tag, err := t.wrapper.Pool.Exec(ctx, q, org, name, t.holder, migrationLease.String())
 	if err != nil {
 		return err
 	}
-	if state == entity.StateMigrating && tag.RowsAffected() == 0 {
+	if tag.RowsAffected() == 0 {
 		return enterr.New(enterr.CodeConflict, "queue is already migrating")
 	}
 	return nil
@@ -146,4 +177,21 @@ func nullable(s string) any {
 		return nil
 	}
 	return s
+}
+
+func (t *QueuesTable) UpdateSettings(ctx context.Context, org, name string, s entity.QueueSettings) error {
+	body, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	tag, err := t.wrapper.Pool.Exec(ctx,
+		`UPDATE queues SET settings=$3, updated_at=now() WHERE org_id=$1 AND name=$2`,
+		org, name, body)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return enterr.NotFound("queue")
+	}
+	return nil
 }

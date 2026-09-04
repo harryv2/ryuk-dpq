@@ -5,16 +5,25 @@ const BASE =
 export type QueueSummary = {
   name: string;
   distributed: boolean;
+  placementWidth?: number;
   state: string;
   ownerNode?: string;
   messages: number;
   inFlight: number;
   oldestMessageAgeSeconds: number;
-  settings: {
-    visibilityTimeout: number;
-    maxRetries: number;
-    defaultTtl: number;
-  };
+  settings: QueueSettings;
+};
+
+// Durations arrive as Go nanoseconds.
+export type QueueSettings = {
+  visibilityTimeout: number;
+  maxRetries: number;
+  defaultTtl: number;
+  starvationThreshold: number;
+  starvationReserve: number;
+  maxDepth: number;
+  deadLetterQueue?: string;
+  placementWidth?: number;
 };
 
 export type QueueStats = {
@@ -63,6 +72,38 @@ export type ClusterPlacement = {
 
 export type ClusterNode = { id: string; addr: string; queues: ClusterPlacement[] };
 
+export type Cluster = { nodes: ClusterNode[]; unavailable: ClusterPlacement[] };
+
+export type NodeQueueDetail = {
+  queue: string;
+  distributed: boolean;
+  slots: number;
+  totalSlots: number;
+  ready: number;
+  byPriority?: { low: number; medium: number; high: number };
+  inFlight: number;
+  delayed: number;
+  oldestMessageAgeSeconds: number;
+  enqueued: number;
+  acked: number;
+  expired: number;
+  redelivered: number;
+  deadLettered: number;
+  starvationEscapes: number;
+};
+
+export type NodeDetail = {
+  id: string;
+  addr: string;
+  live: boolean;
+  slots: number;
+  ready: number;
+  inFlight: number;
+  delayed: number;
+  oldestMessageAgeSeconds: number;
+  queues: NodeQueueDetail[];
+};
+
 export type Message = {
   messageId: string;
   payload: string;
@@ -105,6 +146,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  updateQueue: (t: string, name: string, body: Record<string, unknown>) =>
+    call<QueueSummary>(t, `/v1/queues/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
   deleteQueue: (t: string, name: string) =>
     call<unknown>(t, `/v1/queues/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
@@ -118,7 +165,13 @@ export const api = {
     call<Timeseries>(t, `/v1/queues/${encodeURIComponent(name)}/timeseries?window=${window}`),
 
   cluster: (t: string) =>
-    call<{ nodes: ClusterNode[] }>(t, "/v1/cluster").then((r) => r?.nodes ?? []),
+    call<Cluster>(t, "/v1/cluster").then((r) => ({
+      nodes: r?.nodes ?? [],
+      unavailable: r?.unavailable ?? [],
+    })),
+
+  node: (t: string, id: string) =>
+    call<NodeDetail>(t, `/v1/cluster/nodes/${encodeURIComponent(id)}`),
 
   enqueue: (t: string, name: string, body: Record<string, unknown>) =>
     call<{ messageId: string }>(t, `/v1/queues/${encodeURIComponent(name)}/messages`, {

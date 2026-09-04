@@ -14,7 +14,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 	// The dead-letter queue has to exist now. Checking it only when a message
 	// runs out of retries would lose the message and report nothing.
 	if settings.DeadLetterQueue != "" {
-		dlq, err := l.queueTableRepo.Get(ctx, req.Org, settings.DeadLetterQueue)
+		dlq, err := l.config(ctx, req.Org, settings.DeadLetterQueue)
 		if err != nil {
 			if enterr.CodeOf(err) == enterr.CodeNotFound {
 				return entity.CreateQueueResponse{}, enterr.Invalid(
@@ -30,7 +30,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 
 	owner := ""
 	if !req.Distributed {
-		if m, err := l.assignOwner(req.Org, req.Name, 0, false); err == nil {
+		if m, err := l.assignOwner(req.Org, req.Name, 0, false, 0); err == nil {
 			owner = m.ID
 		}
 	}
@@ -47,7 +47,7 @@ func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRe
 	// machines instead of landing together.
 	if created && req.Distributed {
 		for slot := 0; slot < constants.SlotsPerDistributedQueue; slot++ {
-			m, err := l.assignOwner(req.Org, req.Name, slot, true)
+			m, err := l.assignOwner(req.Org, req.Name, slot, true, settings.PlacementWidth)
 			if err != nil {
 				break
 			}
@@ -96,13 +96,14 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 func (l *GatewayLogic) ListQueues(ctx context.Context, org string) ([]entity.QueueSummary, error) {
 	cfgs, err := l.queueTableRepo.ListByOrg(ctx, org)
 	if err != nil {
-		return nil, enterr.Internal("list queueTableRepo", err)
+		return nil, enterr.Internal("list queues", err)
 	}
 	out := make([]entity.QueueSummary, 0, len(cfgs))
 	for _, c := range cfgs {
 		s := entity.QueueSummary{
 			Name: c.Name, Distributed: c.Distributed, State: string(c.State),
-			OwnerNode: c.OwnerNode, Settings: c.Settings,
+			PlacementWidth: c.Settings.PlacementWidth,
+			OwnerNode:      c.OwnerNode, Settings: c.Settings,
 		}
 		if st, ok := readCache[entity.NodeStats](l, statsCacheKey(c.Org, c.Name)); ok {
 			s.Messages = st.Ready[0] + st.Ready[1] + st.Ready[2]

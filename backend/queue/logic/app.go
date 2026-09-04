@@ -31,6 +31,10 @@ type QueueLogicInterface interface {
 	Held() []engine.QueueKey
 
 	Freeze(entity.QueueSpec, []uint16) (map[uint16][]entity.WireMessage, error)
+	PrepareMove(entity.QueueSpec, []uint16) (map[uint16][]entity.WireMessage, error)
+	DiscardMove(entity.QueueSpec, []uint16) error
+	AbortMove(entity.QueueSpec, []uint16) error
+	HeldSlots() entity.HeldResponse
 	Absorb(entity.TransferRequest) error
 
 	Recover() error
@@ -42,6 +46,9 @@ type QueueLogicInterface interface {
 }
 
 type QueueLogic struct {
+	moveMu       sync.Mutex
+	appliedMoves map[string]bool // handoffs already absorbed, so a retry is a no-op
+
 	cfg     Config
 	log     *slog.Logger
 	clock   engine.Clock

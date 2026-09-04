@@ -90,9 +90,16 @@ type NodeGRPCRepo interface {
 	StatsAll(ctx context.Context, addr string) (string, []NodeStats, error)
 	Drop(ctx context.Context, addr string, spec QueueSpec) error
 
-	// Freeze stops a queue serving and hands back what it held, keyed by slot.
+	// PrepareMove snapshots slots without removing them, so a handoff that
+	// fails leaves the old owner able to serve. DiscardMove is the point of no
+	// return; AbortMove puts them back.
+	PrepareMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) (Transfer, error)
+	DiscardMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) error
+	AbortMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) error
+
+	Held(ctx context.Context, addr string) (HeldResponse, error)
+
 	Freeze(ctx context.Context, addr string, spec QueueSpec, slots []uint16) (Transfer, error)
-	// Absorb merges a transfer into the new owner.
 	Absorb(ctx context.Context, addr string, t Transfer) error
 
 	// Subscribe opens the notification stream so a parked consumer can be woken
@@ -107,6 +114,8 @@ type WorkAvailable struct {
 }
 
 type Transfer struct {
+	// MoveID names one handoff, so absorbing a retry is a no-op.
+	MoveID string
 	Spec   QueueSpec                `json:"spec"`
 	BySlot map[uint16][]WireMessage `json:"bySlot"`
 }
@@ -121,4 +130,16 @@ type WireMessage struct {
 	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
 	DeliverAfter *time.Time `json:"deliverAfter,omitempty"`
 	Attempts     uint32     `json:"attempts"`
+}
+
+type HeldSlots struct {
+	Org    string
+	Name   string
+	Slots  []uint16
+	Frozen []uint16
+}
+
+type HeldResponse struct {
+	NodeID string
+	Queues []HeldSlots
 }

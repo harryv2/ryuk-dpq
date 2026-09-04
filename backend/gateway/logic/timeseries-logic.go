@@ -21,8 +21,8 @@ var windows = map[string]struct {
 }
 
 // Timeseries reads a queue's history back out of the monitoring system. The org
-// comes from the credential, so a caller can only ever see its own queueTableRepo.
-func (l *GatewayLogic) Timeseries(
+// comes from the credential, so a caller can only ever see its own queues.
+func (l *GatewayLogic) GetTimeseriesMetrics(
 	ctx context.Context, org, name, window string,
 ) (entity.TimeseriesResponse, error) {
 	// The queue has to exist and belong to this org before anything is read.

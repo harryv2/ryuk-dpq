@@ -67,6 +67,9 @@ func (l *GatewayLogic) RunSubscriber(ctx context.Context, gatewayID string) {
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 
+	// Taken once: every call registers a listener.
+	changed := l.membershipRepo.Changed()
+
 	for {
 		current := map[string]entity.Member{}
 		for _, m := range l.membershipRepo.Members() {
@@ -97,7 +100,7 @@ func (l *GatewayLogic) RunSubscriber(ctx context.Context, gatewayID string) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-l.membershipRepo.Changed():
+		case <-changed:
 		case <-tick.C:
 		}
 	}

@@ -13,10 +13,19 @@ type CreateQueueRequest struct {
 	MaxDepth            int64   `json:"maxDepth,omitempty"`
 	DeadLetterQueue     string  `json:"deadLetterQueue,omitempty"`
 	Distributed         bool    `json:"distributed,omitempty"`
+	PlacementWidth      int     `json:"placementWidth,omitempty"`
 
 	// Settings holds the fields above once the controller has parsed and
 	// defaulted them.
 	Settings QueueSettings `json:"-"`
+}
+
+// UpdateQueueRequest carries the same fields as creation, so one validator and
+// one set of defaults serve both. The ones that are fixed at creation are
+// rejected rather than ignored.
+type UpdateQueueRequest struct {
+	CreateQueueRequest
+	Distributed *bool `json:"distributed,omitempty"`
 }
 
 type CreateQueueResponse struct {
@@ -26,14 +35,15 @@ type CreateQueueResponse struct {
 }
 
 type QueueSummary struct {
-	Name        string        `json:"name"`
-	Distributed bool          `json:"distributed"`
-	State       string        `json:"state"`
-	OwnerNode   string        `json:"ownerNode,omitempty"`
-	Settings    QueueSettings `json:"settings"`
-	Messages    int64         `json:"messages"`
-	InFlight    int64         `json:"inFlight"`
-	OldestAge   float64       `json:"oldestMessageAgeSeconds"`
+	Name           string        `json:"name"`
+	Distributed    bool          `json:"distributed"`
+	PlacementWidth int           `json:"placementWidth,omitempty"`
+	State          string        `json:"state"`
+	OwnerNode      string        `json:"ownerNode,omitempty"`
+	Settings       QueueSettings `json:"settings"`
+	Messages       int64         `json:"messages"`
+	InFlight       int64         `json:"inFlight"`
+	OldestAge      float64       `json:"oldestMessageAgeSeconds"`
 }
 
 type EnqueueRequest struct {
@@ -49,7 +59,6 @@ type EnqueueRequest struct {
 	TTL             string `json:"ttl,omitempty"`
 	DeliverAfter    string `json:"deliverAfter,omitempty"`
 
-	// Filled by the controller from the fields above.
 	Body          []byte        `json:"-"`
 	PriorityValue uint8         `json:"-"`
 	TTLFor        time.Duration `json:"-"`
@@ -138,4 +147,39 @@ type ClusterNode struct {
 
 type ClusterResponse struct {
 	Nodes []ClusterNode `json:"nodes"`
+	// Unavailable is slots placed on machines that are no longer registered.
+	// Their data is only on those machines, so they are not reassigned.
+	Unavailable []ClusterPlacement `json:"unavailable,omitempty"`
+}
+
+// NodeQueueDetail is one queue's share of one node: the slots placed there and
+// the messages actually sitting in them.
+type NodeQueueDetail struct {
+	Queue        string           `json:"queue"`
+	Distributed  bool             `json:"distributed"`
+	Slots        int              `json:"slots"`
+	TotalSlots   int              `json:"totalSlots"`
+	Ready        int64            `json:"ready"`
+	ByPriority   map[string]int64 `json:"byPriority,omitempty"`
+	InFlight     int64            `json:"inFlight"`
+	Delayed      int64            `json:"delayed"`
+	OldestAge    float64          `json:"oldestMessageAgeSeconds"`
+	Enqueued     uint64           `json:"enqueued"`
+	Acked        uint64           `json:"acked"`
+	Expired      uint64           `json:"expired"`
+	Redelivered  uint64           `json:"redelivered"`
+	DeadLettered uint64           `json:"deadLettered"`
+	Escapes      uint64           `json:"starvationEscapes"`
+}
+
+type NodeDetailResponse struct {
+	ID        string            `json:"id"`
+	Addr      string            `json:"addr"`
+	Live      bool              `json:"live"`
+	Slots     int               `json:"slots"`
+	Ready     int64             `json:"ready"`
+	InFlight  int64             `json:"inFlight"`
+	Delayed   int64             `json:"delayed"`
+	OldestAge float64           `json:"oldestMessageAgeSeconds"`
+	Queues    []NodeQueueDetail `json:"queues"`
 }

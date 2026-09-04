@@ -37,10 +37,10 @@ func (q *Queue) afterTake(r Receipt, m *Message) {
 // reserveTick decides whether this delivery belongs to the share set aside for
 // work that has waited too long.
 func (q *Queue) reserveTick(n uint64) bool {
-	if q.cfg.StarvationReserve <= 0 {
+	if q.cfg().StarvationReserve <= 0 {
 		return false
 	}
-	every := uint64(1.0 / q.cfg.StarvationReserve)
+	every := uint64(1.0 / q.cfg().StarvationReserve)
 	if every == 0 {
 		return true
 	}
@@ -58,6 +58,9 @@ func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
 		found := false
 
 		for _, s := range q.localSlots() {
+			if s.frozen.Load() {
+				continue
+			}
 			h := s.hint.Load()
 			if h == 0 {
 				continue
@@ -73,7 +76,7 @@ func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
 		}
 
 		best.mu.Lock()
-		m, r, ok := best.take(bestBand, now, q.cfg.VisibilityTimeout)
+		m, r, ok := best.take(bestBand, now, q.cfg().VisibilityTimeout)
 		best.mu.Unlock()
 		if ok {
 			r.Incarnation = q.incarnation
@@ -89,18 +92,21 @@ func (q *Queue) takeStarved(now time.Time) (*Message, Receipt, bool) {
 	if len(slots) == 0 {
 		return nil, Receipt{}, false
 	}
-	cutoff := now.Add(-q.cfg.StarvationThreshold)
+	cutoff := now.Add(-q.cfg().StarvationThreshold)
 	start := int(q.cursor.Add(1)) % len(slots)
 
 	for i := 0; i < len(slots) && i < starvationScanLimit; i++ {
 		s := slots[(start+i)%len(slots)]
+		if s.frozen.Load() {
+			continue
+		}
 		s.mu.Lock()
 		p, ok := s.oldestBandBefore(cutoff)
 		if !ok {
 			s.mu.Unlock()
 			continue
 		}
-		m, r, taken := s.take(p, now, q.cfg.VisibilityTimeout)
+		m, r, taken := s.take(p, now, q.cfg().VisibilityTimeout)
 		s.mu.Unlock()
 		if taken {
 			r.Incarnation = q.incarnation

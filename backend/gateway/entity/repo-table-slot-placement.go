@@ -15,7 +15,6 @@ type SlotPlacement struct {
 	Generation uint64
 }
 
-// SlotPlacementTableRepo owns the slot_placement table.
 type SlotPlacementTableRepo interface {
 	ListByQueue(ctx context.Context, org, name string) (map[uint16]string, error)
 	SetOwner(ctx context.Context, org, name string, slot uint16, owner string, generation uint64) error
