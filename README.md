@@ -149,6 +149,11 @@ one **fails** — the retry limit — applies to messages already handed out, so
 lowering it can dead-letter them on their next failure. Nodes pick the change up
 on their next request, because the settings travel with every one.
 
+A Postman collection covering every endpoint is in
+[`docs/postman/`](docs/postman/) — import both files, pick the "Ryuk — local"
+environment, and the poll request saves the receipt so acknowledge works
+straight after it.
+
 ## Two kinds of queue
 
 |  | `distributed: false` (default) | `distributed: true` |
@@ -306,6 +311,7 @@ The integration suite is Gherkin scenarios run by godog — see
 backend/
   queue/        the node: engine, gRPC server, write-ahead log
     logic/engine/   priority, groups, leases, starvation reserve
+  slotting/     which slot a message belongs to -- shared by both services
   gateway/      REST, routing, placement, rebalancing, metric collection
   cmd/          two binaries
 frontend/       Next.js UI, static export, served by the gateway

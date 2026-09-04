@@ -1,0 +1,731 @@
+{
+  "info": {
+    "name": "Ryuk — distributed priority queue",
+    "description": "Every endpoint the gateway serves.\n\n**Auth.** A bearer token maps to an organisation; there is no other tenancy check, so the token is the tenant. The seeded ones are `acme-token` and `globex-token`. Set `token` in the environment to switch tenant.\n\n**Order to try things in.** Create queue → Send a message → Poll for messages (this saves the receipt automatically) → Acknowledge. The poll request has a script that writes `receipt` into the collection variables, so ack and nack work without copying anything by hand.\n\n**Durations** are Go duration strings: `30s`, `5m`, `1h`.\n\n**Priority** is 0–100 and ordered exactly — 91 is served before 90. `HIGH`, `MEDIUM` and `LOW` are accepted as shorthand for 75, 50 and 25.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8090",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "acme-token",
+      "type": "string"
+    },
+    {
+      "key": "queue",
+      "value": "orders",
+      "type": "string"
+    },
+    {
+      "key": "receipt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nodeId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Queues",
+      "item": [
+        {
+          "name": "Create queue (single node)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "Placed whole on one machine, so priority order and counts are exact. If that machine goes down the queue waits for it.\n\nEverything except `name` is optional. Defaults: visibility 30s, 3 retries, starvation reserve 0.2, starvation threshold a quarter of the TTL.\n\n`starvationThreshold` must be below `defaultTtl`, or low-priority messages expire while waiting their turn. `deadLetterQueue` must already exist.\n\n201 on create, 200 if it already exists with the same settings, 409 if it exists with different ones.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"orders\",\n  \"visibilityTimeout\": \"30s\",\n  \"maxRetries\": 3,\n  \"defaultTtl\": \"1h\",\n  \"starvationThreshold\": \"5m\",\n  \"starvationReserve\": 0.2,\n  \"maxDepth\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create queue (distributed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "64 slots placed independently, so the queue spreads over several machines and losing one costs only its slots. Priority order and counts become approximate across machines; ordering within a group stays strict either way.\n\n`placementWidth` (2–64, default 6) bounds how many machines this queue may ever use, however large the cluster grows. Fixed at creation — changing it would re-derive the candidate set and move most of the queue.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"events\",\n  \"distributed\": true,\n  \"placementWidth\": 6,\n  \"visibilityTimeout\": \"30s\",\n  \"maxRetries\": 3,\n  \"defaultTtl\": \"1h\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List queues",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "Every queue in the caller's org, with settings and the last collected counts. The counts come from the metrics collector's cache, so they lag by up to one collection interval."
+          },
+          "response": []
+        },
+        {
+          "name": "Update settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}"
+              ]
+            },
+            "description": "Changes a running queue's settings. Nothing already queued is rewritten — when a change takes effect depends on where the value is read:\n\n| setting | read when | effect on what is already there |\n|---|---|---|\n| visibilityTimeout | a message is delivered | none; applies from the next delivery |\n| defaultTtl | a message is enqueued | none; new messages only |\n| maxRetries | a delivery fails | **immediate and retroactive** |\n| starvationThreshold / reserve | every poll | immediate, whole backlog |\n| maxDepth | a message is enqueued | new sends refused until it drains; nothing discarded |\n| deadLetterQueue | a message dead-letters | redirects future ones |\n\nLowering `maxRetries` can dead-letter in-flight messages on their next failure.\n\n`distributed` and `placementWidth` are rejected: the slot count decides which slot a group lives in, so changing it would send a group's later messages elsewhere.\n\nNodes pick the change up on their next request, because the settings travel with every one.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibilityTimeout\": \"60s\",\n  \"maxRetries\": 5,\n  \"defaultTtl\": \"2h\",\n  \"starvationThreshold\": \"10m\",\n  \"starvationReserve\": 0.25,\n  \"maxDepth\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Queue stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "stats"
+              ]
+            },
+            "description": "Live counts, asked of the owning node rather than read from cache.\n\n`exact` is true for a single-node queue. For a distributed one the numbers are summed across machines that answered at slightly different instants, and `unavailableSlots` says how many slots are on a machine that did not answer."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete queue",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}"
+              ]
+            },
+            "description": "Marks the queue deleting so gateways stop accepting, drops the data on the owner, then removes the row. Messages are discarded."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send a message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages"
+              ]
+            },
+            "description": "`priority` takes a number 0–100 or one of `HIGH`, `MEDIUM`, `LOW` (75, 50, 25).\n\n`groupId` is the ordering key. Messages sharing one are delivered strictly in order, one at a time — the next is not handed out until the previous is acknowledged. Leave it empty and the queue is free to deliver in parallel.\n\n`payloadEncoding` is `text` (default) or `base64`. It is never sniffed: `m000` is both a plausible message and valid base64, so the caller says which.\n\n`deliverAfter` holds the message back; it counts as delayed, not ready, until then. Max payload 256 KiB.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": \"ship order 9981\",\n  \"priority\": \"HIGH\",\n  \"groupId\": \"customer-42\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send a base64 payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages"
+              ]
+            },
+            "description": "For bytes that are not text. Without `payloadEncoding: base64` this payload would be stored as the literal characters rather than decoded.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": \"3q2+7w==\",\n  \"payloadEncoding\": \"base64\",\n  \"priority\": 90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Poll for messages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 204 means nothing was ready.",
+                  "if (pm.response.code === 200) {",
+                  "    const msgs = pm.response.json().messages || [];",
+                  "    if (msgs.length) {",
+                  "        pm.collectionVariables.set('receipt', msgs[0].receipt);",
+                  "        console.log('saved receipt for', msgs[0].messageId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages/dequeue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages",
+                "dequeue"
+              ]
+            },
+            "description": "Takes up to `maxMessages` (capped at 10). Each message comes back with a `receipt` — the token for acknowledging that one delivery attempt.\n\n**200** with messages, **204** when nothing is ready.\n\n`waitTime` (max 20s) parks the request until a message arrives instead of returning empty straight away, which is cheaper than polling in a loop.\n\nA taken message is invisible to other consumers until its visibility timeout expires. If you do not ack before then it is delivered again and the old receipt stops working.\n\nThis request saves the first receipt into the `receipt` collection variable, so Acknowledge and Nack below work immediately.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maxMessages\": 5,\n  \"waitTime\": \"10s\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Acknowledge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages/ack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages",
+                "ack"
+              ]
+            },
+            "description": "Removes the message for good and releases its group so the next message in that group can be delivered.\n\nAcking twice is a success, not an error — a retried ack should not fail. Acking after the visibility timeout expired returns 409: the message was already handed to someone else, and accepting this would delete work another consumer is doing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receipt\": \"{{receipt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nack (return it now)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages/nack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages",
+                "nack"
+              ]
+            },
+            "description": "Ends the lease early: \"I could not process this.\" Without a delay the message is available again **immediately** — that is the point of nack rather than letting the visibility timeout run, which would lock the message for the full 30s after a failure that took 5ms.\n\nThe message returns to the front of its group, because group order is strict and it was the group's head. Its group goes to the back of its priority band, so a message that keeps failing does not hog the head every cycle.\n\nAttempts are counted on delivery, not on nack, so a nack and a timeout cost the same. Once attempts reach `maxRetries` the message goes to the dead-letter queue.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receipt\": \"{{receipt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nack with backoff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/messages/nack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "messages",
+                "nack"
+              ]
+            },
+            "description": "With `delay` the message goes onto the delayed heap and is invisible until the delay passes — the same mechanism as `deliverAfter` on a send. This is the retry-backoff knob.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receipt\": \"{{receipt}}\",\n  \"delay\": \"30s\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "All queues",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "metrics"
+              ]
+            },
+            "description": "Stats for every queue in the org in one call, including throughput. Rates are derived by the gateway from the change in the lifetime counters between two collections — a node only reports totals."
+          },
+          "response": []
+        },
+        {
+          "name": "Queue history",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}/timeseries?window=1h",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}",
+                "timeseries"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "1h",
+                  "description": "5m, 1h, 6h or 24h. A longer window is sampled more coarsely so the number of points stays roughly constant."
+                }
+              ]
+            },
+            "description": "History read back out of Prometheus, so charts survive a reload instead of starting from nothing.\n\n`available: false` means no monitoring system is configured — the UI then falls back to sampling the live endpoint itself. The org comes from the credential, never the request, so a caller cannot read another tenant's series."
+          },
+          "response": []
+        },
+        {
+          "name": "Prometheus scrape endpoint",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "Text exposition format, written by hand so the service needs no metrics library. This is what Prometheus scrapes; nodes are never scraped directly."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cluster",
+      "item": [
+        {
+          "name": "Cluster overview",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const nodes = pm.response.json().nodes || [];",
+                  "    if (nodes.length) {",
+                  "        pm.collectionVariables.set('nodeId', nodes[0].id);",
+                  "        console.log('saved nodeId', nodes[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/cluster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "cluster"
+              ]
+            },
+            "description": "Every live node and which queues sit on it, with the slot count each holds.\n\n`unavailable` lists slots whose owner is no longer registered. Nothing reassigns them — the data is only on that machine — so a queue left entirely on lost machines shows up here rather than disappearing from the view.\n\nSaves the first node id into `nodeId` for the request below."
+          },
+          "response": []
+        },
+        {
+          "name": "Node detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/cluster/nodes/{{nodeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "cluster",
+                "nodes",
+                "{{nodeId}}"
+              ],
+              "variable": [
+                {
+                  "key": "nodeId",
+                  "value": "{{nodeId}}",
+                  "description": "Node id from the cluster overview"
+                }
+              ]
+            },
+            "description": "What one machine holds: slots and messages per queue, plus its lifetime counters. The counts come from the node itself rather than the collector's cache, because the cache holds a queue's total across machines and the point of this page is the split.\n\nA node that is registered but not answering still reports its placement, with `live: false`. 404 if the node id is unknown."
+          },
+          "response": []
+        },
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Liveness only. The gateway is stateless, so this says the process is up, not that Postgres or any node is reachable."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "item": [
+        {
+          "name": "Missing credential → 400",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "The bearer token is the tenant. Without one there is no org to scope to."
+          },
+          "response": []
+        },
+        {
+          "name": "Dead-letter queue must exist → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "Checked at creation rather than when a message runs out of retries — discovering it then would lose the message and report nothing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"tmp-bad-dlq\",\n  \"deadLetterQueue\": \"does-not-exist\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Placement is fixed → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues/{{queue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues",
+                "{{queue}}"
+              ]
+            },
+            "description": "Rejected rather than silently ignored. Changing the slot count would send a group's later messages to a different slot from its earlier ones, breaking the one ordering guarantee a distributed queue makes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"placementWidth\": 8\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Starvation threshold must be below TTL → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/queues",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "queues"
+              ]
+            },
+            "description": "Otherwise the queue silently deletes low-priority work: a message qualifies for the starvation reserve only after it has already expired.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"tmp-bad-threshold\",\n  \"defaultTtl\": \"1m\",\n  \"starvationThreshold\": \"2m\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

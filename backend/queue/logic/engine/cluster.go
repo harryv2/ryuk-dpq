@@ -1,27 +1,18 @@
 package engine
 
 import (
-	"hash/fnv"
 	"strconv"
 	"sync"
+
+	"github.com/harryv2/ryuk-dpq/backend/slotting"
 )
 
-// Must match constants.SlotsPerQueue and SlotsPerDistributedQueue. The engine
-// imports nothing outside the standard library, so a test in queue/logic asserts
-// it instead. If they drift, a message lands in a slot nothing scans.
 const (
-	SlotsPerQueue    = 16
-	MaxSlotsPerQueue = 64
+	SlotsPerQueue    = slotting.PerQueue
+	MaxSlotsPerQueue = slotting.PerDistributedQueue
 )
 
-// SlotCountFor never changes for a given queue: a group key has to keep
-// resolving to the same slot.
-func SlotCountFor(distributed bool) int {
-	if distributed {
-		return MaxSlotsPerQueue
-	}
-	return SlotsPerQueue
-}
+func SlotCountFor(distributed bool) int { return slotting.CountFor(distributed) }
 
 // Cluster tells the engine how a queue is laid out. LocalSlots is where the
 // distributed flag lands: the dispatcher can only compare what it is given.
@@ -57,16 +48,8 @@ func (c *LocalCluster) LocalSlots(_ QueueKey, slots int) []uint16 {
 	return v
 }
 
-// SlotOf hashes org, queue and group together. The separators stop org "a"
-// queue "bc" colliding with org "ab" queue "c".
 func SlotOf(q QueueKey, groupID string, slots int) uint16 {
-	h := fnv.New64a()
-	h.Write([]byte(q.Org))
-	h.Write([]byte{0})
-	h.Write([]byte(q.Name))
-	h.Write([]byte{0})
-	h.Write([]byte(groupID))
-	return uint16(h.Sum64() % uint64(slots))
+	return slotting.SlotFor(q.Org, q.Name, groupID, slots)
 }
 
 // OwnerKeyFor is the key rendezvous hashing places. A normal queue places as a

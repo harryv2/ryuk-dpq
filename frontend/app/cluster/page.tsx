@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useOrg } from "@/lib/org-context";
-import { api, ClusterNode, ClusterPlacement } from "@/lib/api";
+import { api, ClusterNode, ClusterPlacement, Registry } from "@/lib/api";
 import { Empty, Skeleton, StatCard } from "@/lib/ui";
 import { CopyButton } from "@/lib/copy";
 
@@ -57,6 +57,7 @@ export default function Cluster() {
   const { org } = useOrg();
   const [nodes, setNodes] = useState<ClusterNode[]>([]);
   const [unavailable, setUnavailable] = useState<ClusterPlacement[]>([]);
+  const [registry, setRegistry] = useState<Registry | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -68,6 +69,7 @@ export default function Cluster() {
         if (!alive) return;
         setNodes(c.nodes);
         setUnavailable(c.unavailable);
+        setRegistry(await api.registry(org.token));
         setErr("");
       } catch (e: any) {
         if (alive) setErr(e.message);
@@ -263,6 +265,75 @@ export default function Cluster() {
           </tbody>
         </table>
       </div>
+
+      <RegistryView data={registry} />
+    </>
+  );
+}
+
+// etcd holds one key per node under a lease. Showing it raw is worth a screen
+// of its own: the member list above is what the gateway believes, and this is
+// what is actually stored, so the two disagreeing is visible rather than
+// something to guess at.
+function RegistryView({ data }: { data: Registry | null }) {
+  const [open, setOpen] = useState(false);
+  const entries = data?.entries ?? [];
+  const stale = data ? data.watching !== entries.length : false;
+
+  return (
+    <>
+      <div className="row" style={{ marginTop: 32, alignItems: "baseline", gap: 10 }}>
+        <h2 style={{ margin: 0 }}>Registry</h2>
+        <button className="ghost" onClick={() => setOpen(!open)}>
+          {open ? "hide" : `show ${entries.length} key${entries.length === 1 ? "" : "s"}`}
+        </button>
+        {stale && (
+          <span className="tag high" title="The gateway's member list does not match what etcd holds">
+            gateway sees {data!.watching}
+          </span>
+        )}
+      </div>
+      <p className="muted" style={{ margin: "4px 0 14px", maxWidth: 720, fontSize: 13 }}>
+        What etcd actually holds, under <span className="mono">/ryuk/</span>. Each key
+        is kept alive by a lease; when a node stops renewing, the key expires and
+        the node leaves the cluster on its own.
+      </p>
+
+      {open && (
+        <div className="card flush">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+                <th className="num">Lease</th>
+                <th className="num">Expires in</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.length === 0 && (
+                <tr>
+                  <td colSpan={4}>
+                    <Empty title="Nothing registered">
+                      A node writes its key here when it starts.
+                    </Empty>
+                  </td>
+                </tr>
+              )}
+              {entries.map((e) => (
+                <tr key={e.key}>
+                  <td className="mono">{e.key}</td>
+                  <td className="mono muted" style={{ fontSize: 12 }}>{e.value}</td>
+                  <td className="num mono muted">{e.lease || "—"}</td>
+                  <td className="num muted">
+                    {e.ttlSeconds ? `${e.ttlSeconds}s` : "no lease"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

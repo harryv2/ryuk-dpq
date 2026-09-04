@@ -203,3 +203,27 @@ func TestClusterReportsSlotsWhoseOwnerIsGone(t *testing.T) {
 		t.Fatalf("slots on the departed machine were not reported: %+v", out.Unavailable)
 	}
 }
+
+// The registry view exists to make a disagreement visible, so the count the
+// gateway believes has to come back alongside what etcd holds.
+func TestRegistryReportsEtcdAndWhatTheGatewayBelieves(t *testing.T) {
+	ms := []entity.Member{{ID: "node-1", Addr: "n1:9090"}}
+	l, d := setupWithMembers(t, ms)
+
+	d.members.EXPECT().Entries(gomock.Any()).Return([]entity.RegistryEntry{
+		{Key: "/ryuk/members/node-1", Value: `{"id":"node-1"}`, TTLSeconds: 7},
+		{Key: "/ryuk/members/node-2", Value: `{"id":"node-2"}`, TTLSeconds: 3},
+	}, nil)
+
+	out, err := l.GetRegistry(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Entries) != 2 {
+		t.Fatalf("returned %d entries, want both", len(out.Entries))
+	}
+	// etcd holds two, the gateway is tracking one: that gap is the point.
+	if out.Watching != 1 {
+		t.Fatalf("watching = %d, want the gateway's own count", out.Watching)
+	}
+}

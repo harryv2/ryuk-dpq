@@ -74,6 +74,16 @@ export type ClusterNode = { id: string; addr: string; queues: ClusterPlacement[]
 
 export type Cluster = { nodes: ClusterNode[]; unavailable: ClusterPlacement[] };
 
+export type RegistryEntry = {
+  key: string;
+  value: string;
+  lease?: string;
+  ttlSeconds?: number;
+  version: number;
+};
+
+export type Registry = { entries: RegistryEntry[]; watching: number };
+
 export type NodeQueueDetail = {
   queue: string;
   distributed: boolean;
@@ -168,6 +178,12 @@ export const api = {
     call<Cluster>(t, "/v1/cluster").then((r) => ({
       nodes: r?.nodes ?? [],
       unavailable: r?.unavailable ?? [],
+    })),
+
+  registry: (t: string) =>
+    call<Registry>(t, "/v1/cluster/registry").then((r) => ({
+      entries: r?.entries ?? [],
+      watching: r?.watching ?? 0,
     })),
 
   node: (t: string, id: string) =>

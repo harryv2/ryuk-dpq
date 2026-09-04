@@ -145,6 +145,13 @@ type ClusterNode struct {
 	Queues []ClusterPlacement `json:"queues"`
 }
 
+// RegistryResponse is the raw etcd contents plus how many nodes the gateway
+// itself is tracking, so the two can be compared.
+type RegistryResponse struct {
+	Entries  []RegistryEntry `json:"entries"`
+	Watching int             `json:"watching"`
+}
+
 type ClusterResponse struct {
 	Nodes []ClusterNode `json:"nodes"`
 	// Unavailable is slots placed on machines that are no longer registered.

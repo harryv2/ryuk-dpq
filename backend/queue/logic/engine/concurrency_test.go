@@ -495,11 +495,11 @@ func TestDeadLetterExactlyOnce(t *testing.T) {
 
 	var mu sync.Mutex
 	dead := map[string]int{}
-	record := func(msgs []*Message) {
+	record := func(ds []DeadLetter) {
 		mu.Lock()
 		defer mu.Unlock()
-		for _, m := range msgs {
-			dead[m.ID]++
+		for _, d := range ds {
+			dead[d.Msg.ID]++
 		}
 	}
 
@@ -523,7 +523,7 @@ func TestDeadLetterExactlyOnce(t *testing.T) {
 					continue
 				}
 				if m, err := q.Nack(r, 0); err == nil && m != nil {
-					record([]*Message{m})
+					record([]DeadLetter{{Slot: r.Slot, Msg: m}})
 				}
 			}
 		}()

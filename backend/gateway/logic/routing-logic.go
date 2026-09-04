@@ -3,15 +3,14 @@ package logic
 import (
 	"context"
 	"encoding/base64"
-	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/harryv2/ryuk-dpq/backend/constants"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
+	"github.com/harryv2/ryuk-dpq/backend/slotting"
 )
 
 // moveBackoff is how long to wait before re-reading placement and trying again.
@@ -95,24 +94,15 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 // has to agree with engine.SlotCountFor: if the gateway thinks a queue has more
 // slots than the node does, a message lands in a slot the dispatcher never
 // looks at and is never delivered.
-func slotCountFor(distributed bool) int {
-	if distributed {
-		return constants.SlotsPerDistributedQueue
-	}
-	return constants.SlotsPerQueue
-}
+func slotCountFor(distributed bool) int { return slotting.CountFor(distributed) }
 
+// An ungrouped message has no ordering to preserve, so it is scattered instead
+// of all of them landing in the slot the empty string hashes to.
 func slotOf(org, name, group string, slots int) uint16 {
 	if group == "" {
 		group = strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
-	h := fnv.New64a()
-	h.Write([]byte(org))
-	h.Write([]byte{0})
-	h.Write([]byte(name))
-	h.Write([]byte{0})
-	h.Write([]byte(group))
-	return uint16(h.Sum64() % uint64(slots))
+	return slotting.SlotFor(org, name, group, slots)
 }
 
 func slotFromReceipt(receipt string) (int, error) {

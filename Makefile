@@ -1,5 +1,5 @@
 .PHONY: build test test-race vet up down scale logs clean integration integration-fast \
-	infra infra-down infra-logs run-gateway run-node dev-env
+	infra infra-down infra-reset infra-logs etcd-ui etcd-keys run-gateway run-node dev-env
 
 build:
 	go build ./backend/...
@@ -24,20 +24,46 @@ up:
 
 DEV := -f docker-compose.yml -f docker-compose.dev.yml
 
+# Removes any gateway or node container first. `make up` starts those without
+# the dev overlay, which leaves Postgres and etcd unpublished -- so a stack
+# started that way silently cuts off processes running from an IDE.
 infra:
+	@cd deploy && docker compose -p ryuk rm -sf gateway node 2>/dev/null || true
 	cd deploy && docker compose $(DEV) up -d postgres etcd prometheus
 	@echo
 	@echo "  postgres    localhost:5432   ryuk / ryuk / ryuk"
 	@echo "  etcd        localhost:2379"
-	@echo "  prometheus  http://localhost:9091"
+	@echo "  prometheus  http://localhost:9091   (scrapes the gateway on :8080)"
 	@echo
-	@echo "  now run the gateway and a node -- 'make dev-env' prints the variables"
+	@echo "  now run the gateway and the nodes -- 'make dev-env' prints the variables"
 
 infra-down:
 	cd deploy && docker compose $(DEV) down
 
+# Everything back to empty: containers, the Postgres volume, and the node,
+# etcd and Prometheus data under ./data.
+infra-reset:
+	cd deploy && docker compose $(DEV) down -v --remove-orphans
+	rm -rf data
+	@echo "  wiped. 'make infra' starts again from nothing"
+
 infra-logs:
 	cd deploy && docker compose $(DEV) logs -f postgres etcd prometheus
+
+# A browser view of etcd. The image is amd64 only and its UI defaults to
+# 127.0.0.1, which inside the container is itself -- hence the platform flag and
+# the patch. Open http://localhost:8021/etcdkeeper/ and pick v3.
+etcd-ui:
+	-docker rm -f etcdkeeper
+	docker run -d --name etcdkeeper --platform linux/amd64 \
+		--network ryuk_default -p 8021:8080 evildecay/etcdkeeper
+	@sleep 2
+	@docker exec etcdkeeper sed -i 's|127.0.0.1:2379|etcd:2379|g' assets/etcdkeeper/index.html
+	@echo "  http://localhost:8021/etcdkeeper/"
+
+# The same thing without a browser.
+etcd-keys:
+	@docker exec ryuk-etcd-1 etcdctl --endpoints=localhost:2379 get --prefix /ryuk/
 
 # The gateway's defaults already point at localhost, so it needs little else.
 run-gateway:
@@ -105,8 +131,9 @@ integration-tags:
 # The engine must stay free of everything outside the standard library, and the
 # layers must not reach past each other. This is the rule that erodes first.
 lint-layers:
-	@! grep -rl '"github.com/harryv2/ryuk-dpq' backend/queue/logic/engine \
-		| grep -q . || (echo "engine must not import from the module"; exit 1)
+	@! grep -rhn '"github.com/harryv2/ryuk-dpq' backend/queue/logic/engine \
+		| grep -v '/backend/slotting"' | grep -q . \
+		|| (echo "engine may import backend/slotting and nothing else from the module"; exit 1)
 	@! grep -rn 'gateway/repo\|queue/repo' backend/*/controller/*.go 2>/dev/null \
 		| grep -q . || (echo "controllers must not import repo"; exit 1)
 	@! grep -rn 'gateway/logic\|gateway/repo\|gateway/controller' backend/gateway/entity/*.go 2>/dev/null \

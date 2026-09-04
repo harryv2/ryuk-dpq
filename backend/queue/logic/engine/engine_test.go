@@ -150,7 +150,7 @@ func TestDeadLetterAfterMaxRetries(t *testing.T) {
 		clk.Advance(31 * time.Second)
 		res := q.Sweep()
 		if i == 1 {
-			if len(res.DeadLettered) != 1 || res.DeadLettered[0].ID != m.ID {
+			if len(res.DeadLettered) != 1 || res.DeadLettered[0].Msg.ID != m.ID {
 				t.Fatalf("expected dead-letter on attempt 2, got %+v", res)
 			}
 			return
@@ -606,4 +606,50 @@ func TestLoweringRetriesAppliesToMessagesAlreadyDelivered(t *testing.T) {
 	if dead == nil {
 		t.Fatal("a message past the new limit should dead-letter on its next failure")
 	}
+}
+
+// A terminal record has to go in the log of the slot the message is actually
+// in. Deriving it from the group key instead gives the wrong slot for an
+// ungrouped message -- the gateway chose that slot from something other than
+// the id -- so the message's own log keeps an enqueue with no terminal and a
+// restart resurrects a message that was already dead-lettered.
+func TestDeadLetterTerminalGoesToTheSlotTheMessageIsIn(t *testing.T) {
+	j := &recordingJournal{terminals: map[string]uint16{}}
+	clk := NewFakeClock()
+	q := New(Config{
+		Key:               QueueKey{Org: "org1", Name: "orders"},
+		VisibilityTimeout: time.Second,
+		MaxRetries:        1,
+	}, clk, NewLocalCluster(), j, 1)
+
+	// Ungrouped, and placed by slot the way the gateway places one.
+	const placed uint16 = 7
+	m, err := q.EnqueueToSlot(placed, EnqueueOptions{Payload: []byte("x"), Priority: High})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := q.Dequeue(); !ok {
+		t.Fatal("expected a delivery")
+	}
+
+	clk.Advance(2 * time.Second)
+	res := q.Sweep()
+	if len(res.DeadLettered) != 1 {
+		t.Fatalf("dead-lettered %d messages, want 1", len(res.DeadLettered))
+	}
+	if got := res.DeadLettered[0].Slot; got != placed {
+		t.Fatalf("reported slot %d, the message is in %d", got, placed)
+	}
+	if got := j.terminals[m.ID]; got != placed {
+		t.Fatalf("terminal written to slot %d, the message's log is slot %d", got, placed)
+	}
+}
+
+type recordingJournal struct {
+	NoopJournal
+	terminals map[string]uint16
+}
+
+func (r *recordingJournal) AppendTerminal(slot uint16, id string, _ TerminalKind) {
+	r.terminals[id] = slot
 }

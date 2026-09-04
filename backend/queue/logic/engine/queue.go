@@ -281,11 +281,19 @@ func (q *Queue) Nack(r Receipt, delay time.Duration) (*Message, error) {
 	return dead, err
 }
 
+// DeadLetter carries the slot the message was in. Recomputing it from the group
+// key gives the wrong answer for an ungrouped message, whose slot was chosen by
+// the gateway from something other than its id.
+type DeadLetter struct {
+	Slot uint16
+	Msg  *Message
+}
+
 type SweepResult struct {
 	Redelivered  int
 	Expired      int
 	Released     int
-	DeadLettered []*Message
+	DeadLettered []DeadLetter
 }
 
 // Sweep runs the three timers. Callable directly so tests drive the real code
@@ -314,12 +322,14 @@ func (q *Queue) Sweep() SweepResult {
 		st := s.stats(now)
 		s.mu.Unlock()
 
-		res.DeadLettered = append(res.DeadLettered, dead...)
+		for _, m := range dead {
+			res.DeadLettered = append(res.DeadLettered, DeadLetter{Slot: s.id, Msg: m})
+		}
 		depth += st.ReadyTotal() + st.InFlight + st.Delayed
 	}
 
-	for _, m := range res.DeadLettered {
-		q.journal.AppendTerminal(SlotOf(q.cfg().Key, m.group(), q.slotCount()), m.ID, TerminalDeadLettered)
+	for _, d := range res.DeadLettered {
+		q.journal.AppendTerminal(d.Slot, d.Msg.ID, TerminalDeadLettered)
 	}
 	q.depth.Store(depth)
 	return res

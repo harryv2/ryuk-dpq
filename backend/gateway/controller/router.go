@@ -20,6 +20,7 @@ func (h *Handlers) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/metrics", h.withOrg(h.Metrics))
 	mux.HandleFunc("GET /v1/cluster", h.HandleGetClusterDetails)
 	mux.HandleFunc("GET /v1/cluster/nodes/{id}", h.withOrg(h.HandleGetNodeDetails))
+	mux.HandleFunc("GET /v1/cluster/registry", h.HandleGetRegistry)
 	mux.HandleFunc("GET /metrics", h.PrometheusMetrics)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

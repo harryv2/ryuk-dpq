@@ -18,8 +18,8 @@ func (l *QueueLogic) Sweep() {
 
 	for key, lq := range snapshot {
 		res := lq.q.Sweep()
-		for _, m := range res.DeadLettered {
-			l.offerDeadLetter(key, m)
+		for _, d := range res.DeadLettered {
+			l.offerDeadLetter(key, d.Msg)
 		}
 		if n := res.Redelivered + res.Released; n > 0 {
 			l.notifyWork(key, 0, n)
@@ -52,8 +52,6 @@ func (l *QueueLogic) RunSweeper(stop <-chan struct{}) {
 
 const compactEvery = 5 * time.Minute
 
-// Freeze stops a queue serving and hands back everything it held, keyed by slot
-// so placement survives the move.
 // Compact rewrites each queue's log to hold only what is still live.
 func (l *QueueLogic) Compact() {
 	l.mu.RLock()

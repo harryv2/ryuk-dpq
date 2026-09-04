@@ -33,6 +33,7 @@ type GatewayLogicInterface interface {
 	GetMetrics(context.Context, string) ([]entity.QueueStatsResponse, error)
 	GetClusterDetails(context.Context) (entity.ClusterResponse, error)
 	GetNodeDetails(context.Context, string, string) (entity.NodeDetailResponse, error)
+	GetRegistry(context.Context) (entity.RegistryResponse, error)
 
 	Collect(context.Context)
 	Reconcile(context.Context)

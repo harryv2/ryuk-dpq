@@ -5,20 +5,28 @@ import (
 
 	"github.com/harryv2/ryuk-dpq/backend/constants"
 	"github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
+	"github.com/harryv2/ryuk-dpq/backend/slotting"
 )
 
-// The engine imports nothing outside the standard library, so it cannot share
-// this constant with the rest of the module. If the two drift, the gateway
-// routes a message to a slot the dispatcher never scans and it is written to
-// the log and then never delivered -- silent, and only for some group keys.
-func TestSlotCountMatchesSharedConstant(t *testing.T) {
-	if engine.SlotsPerQueue != constants.SlotsPerQueue {
-		t.Fatalf("engine.SlotsPerQueue = %d but constants.SlotsPerQueue = %d; "+
-			"a message routed to a slot outside the engine's range is never delivered",
-			engine.SlotsPerQueue, constants.SlotsPerQueue)
+// These used to be three separate copies that a test compared. They now come
+// from one place, so this only guards against someone reintroducing a literal.
+func TestSlotCountsComeFromOnePlace(t *testing.T) {
+	if engine.SlotsPerQueue != slotting.PerQueue || constants.SlotsPerQueue != slotting.PerQueue {
+		t.Fatal("a slot count has been redefined instead of taken from slotting")
 	}
-	if engine.MaxSlotsPerQueue != constants.SlotsPerDistributedQueue {
-		t.Fatalf("engine.MaxSlotsPerQueue = %d but constants.SlotsPerDistributedQueue = %d",
-			engine.MaxSlotsPerQueue, constants.SlotsPerDistributedQueue)
+	if engine.MaxSlotsPerQueue != slotting.PerDistributedQueue ||
+		constants.SlotsPerDistributedQueue != slotting.PerDistributedQueue {
+		t.Fatal("a distributed slot count has been redefined instead of taken from slotting")
+	}
+}
+
+// The gateway picks a slot and the node stores by it, so a grouped message has
+// to reach the same answer on both sides.
+func TestGatewayAndEngineAgreeOnAGroupsSlot(t *testing.T) {
+	const org, name, group = "org1", "orders", "customer-7"
+	want := engine.SlotOf(engine.QueueKey{Org: org, Name: name}, group, slotting.PerQueue)
+	got := slotting.SlotFor(org, name, group, slotting.PerQueue)
+	if got != want {
+		t.Fatalf("gateway would route to slot %d, the node stores in %d", got, want)
 	}
 }

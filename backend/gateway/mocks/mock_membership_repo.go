@@ -55,6 +55,21 @@ func (mr *MockMembershipRepoMockRecorder) Changed() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changed", reflect.TypeOf((*MockMembershipRepo)(nil).Changed))
 }
 
+// Entries mocks base method.
+func (m *MockMembershipRepo) Entries(ctx context.Context) ([]entity.RegistryEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Entries", ctx)
+	ret0, _ := ret[0].([]entity.RegistryEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Entries indicates an expected call of Entries.
+func (mr *MockMembershipRepoMockRecorder) Entries(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Entries", reflect.TypeOf((*MockMembershipRepo)(nil).Entries), ctx)
+}
+
 // Lookup mocks base method.
 func (m *MockMembershipRepo) Lookup(id string) (entity.Member, bool) {
 	m.ctrl.T.Helper()
