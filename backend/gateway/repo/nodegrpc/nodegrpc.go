@@ -107,6 +107,7 @@ func specTo(s entity.QueueSpec) *pb.QueueSpec {
 		StarvationReserve:     s.StarvationReserve,
 		MaxDepth:              s.MaxDepth,
 		Distributed:           s.Distributed,
+		HasDeadLetter:         s.HasDeadLetter,
 		Generation:            s.Generation,
 	}
 }
@@ -408,4 +409,47 @@ func slotsFrom(in []uint32) []uint16 {
 		out = append(out, uint16(v))
 	}
 	return out
+}
+
+func (r *Repo) DeadLetters(ctx context.Context, addr string) ([]entity.DeadLetterItem, error) {
+	c, err := r.client(addr)
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.DeadLetters(ctx, &pb.Empty{})
+	if err != nil {
+		return nil, r.failed(addr, err)
+	}
+	items := make([]entity.DeadLetterItem, 0, len(out.DeadLetters))
+	for _, d := range out.DeadLetters {
+		m := d.GetMessage()
+		if m == nil {
+			continue
+		}
+		items = append(items, entity.DeadLetterItem{
+			Org:  d.Org,
+			Name: d.Name,
+			Message: entity.NodeMessage{
+				MessageID:  m.Id,
+				Payload:    m.Payload,
+				Priority:   uint8(m.Priority),
+				GroupID:    m.GroupId,
+				Attempts:   m.Attempts,
+				EnqueuedAt: time.Unix(0, m.EnqueuedAtUnixNs),
+			},
+			Attempts: m.Attempts,
+		})
+	}
+	return items, nil
+}
+
+func (r *Repo) AckDeadLetters(ctx context.Context, addr string, ids []string) error {
+	c, err := r.client(addr)
+	if err != nil {
+		return err
+	}
+	if _, err := c.AckDeadLetters(ctx, &pb.AckDeadLettersRequest{MessageIds: ids}); err != nil {
+		return r.failed(addr, err)
+	}
+	return nil
 }

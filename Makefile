@@ -124,6 +124,13 @@ integration:
 integration-fast:
 	cd integration && RYUK_IT_NO_BUILD=1 go test -v -timeout 25m
 
+# Fill a running gateway with queues and messages, so the UI and the metric
+# charts have something to show. make seed RESET=1 clears what is there first.
+QUEUES   ?= 12
+MESSAGES ?= 150
+seed:
+	go run ./backend/tests/seed -queues $(QUEUES) -messages $(MESSAGES) $(if $(RESET),-reset,)
+
 # make integration-tags TAGS=@failure
 integration-tags:
 	cd integration && RYUK_IT_TAGS=$(TAGS) go test -v -timeout 25m

@@ -1,6 +1,7 @@
 package walfile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -173,4 +174,100 @@ func TestDropRemovesSlot(t *testing.T) {
 	if len(got[5]) != 0 {
 		t.Fatal("slot survived drop")
 	}
+}
+
+// The point of writing dead letters down: a node that restarts before the
+// gateway drains it must still know it owes those messages.
+func TestDeadLettersSurviveARestart(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncNever}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range []*engine.Message{msg("a", 1), msg("b", 2), msg("c", 3)} {
+		if err := w.AppendDeadLetter(uint16(i), m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.AppendDeadLetterDrained("b"); err != nil { // the gateway took this one
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	w2, err := Open(Options{Dir: dir, Sync: SyncNever}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w2.Close()
+
+	pending, err := w2.ReplayDeadLetters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("recovered %d dead letters, want a and c", len(pending))
+	}
+	if pending[0].Msg.ID != "a" || pending[0].Slot != 0 {
+		t.Fatalf("first is %+v, want a in slot 0", pending[0])
+	}
+	if pending[1].Msg.ID != "c" || pending[1].Slot != 2 {
+		t.Fatalf("second is %+v, want c in slot 2", pending[1])
+	}
+}
+
+// Compaction drops the drained records, which are most of the file on a busy
+// queue, without losing what is still outstanding.
+func TestCompactDeadLettersKeepsWhatIsOutstanding(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncNever}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	for i := 0; i < 50; i++ {
+		if err := w.AppendDeadLetter(1, msg(fmt.Sprintf("m%d", i), uint64(i))); err != nil {
+			t.Fatal(err)
+		}
+		if i < 48 {
+			if err := w.AppendDeadLetterDrained(fmt.Sprintf("m%d", i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	pending, err := w.ReplayDeadLetters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("expected 2 outstanding, got %d", len(pending))
+	}
+
+	before := fileSize(t, filepath.Join(dir, deadLetterFile))
+	if err := w.CompactDeadLetters(pending); err != nil {
+		t.Fatal(err)
+	}
+	after := fileSize(t, filepath.Join(dir, deadLetterFile))
+	if after >= before {
+		t.Fatalf("compaction did not shrink the log: %d -> %d", before, after)
+	}
+
+	again, err := w.ReplayDeadLetters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 2 || again[0].Msg.ID != "m48" || again[1].Msg.ID != "m49" {
+		t.Fatalf("after compaction: %+v", again)
+	}
+}
+
+func fileSize(t *testing.T, p string) int64 {
+	t.Helper()
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Size()
 }

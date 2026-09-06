@@ -14,6 +14,11 @@ import (
 
 const prefix = "/ryuk/members/"
 
+const (
+	minRegisterBackoff = 250 * time.Millisecond
+	maxRegisterBackoff = 5 * time.Second
+)
+
 type Repo struct {
 	cli *clientv3.Client
 	log *slog.Logger
@@ -38,26 +43,69 @@ func New(endpoints Endpoints, log *slog.Logger) (*Repo, func(), error) {
 func (r *Repo) Close() error { return r.cli.Close() }
 
 func (r *Repo) Register(ctx context.Context, id, addr string, ttlSeconds int64) error {
-	lease, err := r.cli.Grant(ctx, ttlSeconds)
+	ch, err := r.publish(ctx, id, addr, ttlSeconds)
 	if err != nil {
 		return err
+	}
+	r.log.Info("registered", "node", id, "addr", addr, "ttlSeconds", ttlSeconds)
+	go r.keepRegistered(ctx, id, addr, ttlSeconds, ch)
+	return nil
+}
+
+// publish grants a lease, writes this node under it and starts renewing. The
+// channel it returns closes when the lease is gone.
+func (r *Repo) publish(
+	ctx context.Context, id, addr string, ttlSeconds int64,
+) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
+	lease, err := r.cli.Grant(ctx, ttlSeconds)
+	if err != nil {
+		return nil, err
 	}
 	body, err := json.Marshal(map[string]string{"id": id, "addr": addr})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := r.cli.Put(ctx, prefix+id, string(body), clientv3.WithLease(lease.ID)); err != nil {
-		return err
+		return nil, err
 	}
-	ch, err := r.cli.KeepAlive(ctx, lease.ID)
-	if err != nil {
-		return err
-	}
-	go func() {
+	return r.cli.KeepAlive(ctx, lease.ID)
+}
+
+// keepRegistered publishes the node again whenever its lease ends. An etcd
+// outage longer than the TTL revokes it, and without this the node keeps
+// running and serving while every gateway believes it is gone -- its queues
+// unroutable, and nothing to put it back but a restart.
+func (r *Repo) keepRegistered(
+	ctx context.Context, id, addr string, ttlSeconds int64,
+	ch <-chan *clientv3.LeaseKeepAliveResponse,
+) {
+	backoff := minRegisterBackoff
+	for {
 		for range ch {
 		}
-		r.log.Warn("membership lease ended", "node", id)
-	}()
-	r.log.Info("registered", "node", id, "addr", addr, "ttlSeconds", ttlSeconds)
-	return nil
+		if ctx.Err() != nil {
+			return
+		}
+		r.log.Warn("membership lease ended, re-registering", "node", id)
+
+		ch = nil
+		for ch == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			next, err := r.publish(ctx, id, addr, ttlSeconds)
+			if err != nil {
+				r.log.Warn("re-register", "node", id, "err", err)
+				backoff *= 2
+				if backoff > maxRegisterBackoff {
+					backoff = maxRegisterBackoff
+				}
+				continue
+			}
+			r.log.Info("re-registered", "node", id, "addr", addr)
+			ch, backoff = next, minRegisterBackoff
+		}
+	}
 }

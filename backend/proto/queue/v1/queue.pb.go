@@ -35,8 +35,11 @@ type QueueSpec struct {
 	MaxDepth              int64                  `protobuf:"varint,8,opt,name=max_depth,json=maxDepth,proto3" json:"max_depth,omitempty"`
 	Distributed           bool                   `protobuf:"varint,9,opt,name=distributed,proto3" json:"distributed,omitempty"`
 	Generation            uint64                 `protobuf:"varint,10,opt,name=generation,proto3" json:"generation,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Whether failures have anywhere to go. Without a dead-letter queue a message
+	// that runs out of retries keeps being redelivered rather than dropped.
+	HasDeadLetter bool `protobuf:"varint,11,opt,name=has_dead_letter,json=hasDeadLetter,proto3" json:"has_dead_letter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueueSpec) Reset() {
@@ -139,6 +142,169 @@ func (x *QueueSpec) GetGeneration() uint64 {
 	return 0
 }
 
+func (x *QueueSpec) GetHasDeadLetter() bool {
+	if x != nil {
+		return x.HasDeadLetter
+	}
+	return false
+}
+
+type DeadLetter struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slot          uint32                 `protobuf:"varint,3,opt,name=slot,proto3" json:"slot,omitempty"`
+	Message       *WireMessage           `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeadLetter) Reset() {
+	*x = DeadLetter{}
+	mi := &file_queue_v1_queue_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeadLetter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeadLetter) ProtoMessage() {}
+
+func (x *DeadLetter) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeadLetter.ProtoReflect.Descriptor instead.
+func (*DeadLetter) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DeadLetter) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *DeadLetter) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeadLetter) GetSlot() uint32 {
+	if x != nil {
+		return x.Slot
+	}
+	return 0
+}
+
+func (x *DeadLetter) GetMessage() *WireMessage {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+type DeadLetterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeadLetters   []*DeadLetter          `protobuf:"bytes,1,rep,name=dead_letters,json=deadLetters,proto3" json:"dead_letters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeadLetterResponse) Reset() {
+	*x = DeadLetterResponse{}
+	mi := &file_queue_v1_queue_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeadLetterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeadLetterResponse) ProtoMessage() {}
+
+func (x *DeadLetterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeadLetterResponse.ProtoReflect.Descriptor instead.
+func (*DeadLetterResponse) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DeadLetterResponse) GetDeadLetters() []*DeadLetter {
+	if x != nil {
+		return x.DeadLetters
+	}
+	return nil
+}
+
+type AckDeadLettersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageIds    []string               `protobuf:"bytes,1,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckDeadLettersRequest) Reset() {
+	*x = AckDeadLettersRequest{}
+	mi := &file_queue_v1_queue_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckDeadLettersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckDeadLettersRequest) ProtoMessage() {}
+
+func (x *AckDeadLettersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_queue_v1_queue_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckDeadLettersRequest.ProtoReflect.Descriptor instead.
+func (*AckDeadLettersRequest) Descriptor() ([]byte, []int) {
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AckDeadLettersRequest) GetMessageIds() []string {
+	if x != nil {
+		return x.MessageIds
+	}
+	return nil
+}
+
 type EnqueueRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Spec  *QueueSpec             `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
@@ -156,7 +322,7 @@ type EnqueueRequest struct {
 
 func (x *EnqueueRequest) Reset() {
 	*x = EnqueueRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_queue_v1_queue_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -168,7 +334,7 @@ func (x *EnqueueRequest) String() string {
 func (*EnqueueRequest) ProtoMessage() {}
 
 func (x *EnqueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[1]
+	mi := &file_queue_v1_queue_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -181,7 +347,7 @@ func (x *EnqueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnqueueRequest.ProtoReflect.Descriptor instead.
 func (*EnqueueRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{1}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *EnqueueRequest) GetSpec() *QueueSpec {
@@ -244,7 +410,7 @@ type EnqueueResponse struct {
 
 func (x *EnqueueResponse) Reset() {
 	*x = EnqueueResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[2]
+	mi := &file_queue_v1_queue_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -256,7 +422,7 @@ func (x *EnqueueResponse) String() string {
 func (*EnqueueResponse) ProtoMessage() {}
 
 func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[2]
+	mi := &file_queue_v1_queue_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -269,7 +435,7 @@ func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnqueueResponse.ProtoReflect.Descriptor instead.
 func (*EnqueueResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{2}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *EnqueueResponse) GetMessageId() string {
@@ -303,7 +469,7 @@ type DequeueRequest struct {
 
 func (x *DequeueRequest) Reset() {
 	*x = DequeueRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[3]
+	mi := &file_queue_v1_queue_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -315,7 +481,7 @@ func (x *DequeueRequest) String() string {
 func (*DequeueRequest) ProtoMessage() {}
 
 func (x *DequeueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[3]
+	mi := &file_queue_v1_queue_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -328,7 +494,7 @@ func (x *DequeueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DequeueRequest.ProtoReflect.Descriptor instead.
 func (*DequeueRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{3}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DequeueRequest) GetSpec() *QueueSpec {
@@ -360,7 +526,7 @@ type DeliveredMessage struct {
 
 func (x *DeliveredMessage) Reset() {
 	*x = DeliveredMessage{}
-	mi := &file_queue_v1_queue_proto_msgTypes[4]
+	mi := &file_queue_v1_queue_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +538,7 @@ func (x *DeliveredMessage) String() string {
 func (*DeliveredMessage) ProtoMessage() {}
 
 func (x *DeliveredMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[4]
+	mi := &file_queue_v1_queue_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +551,7 @@ func (x *DeliveredMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeliveredMessage.ProtoReflect.Descriptor instead.
 func (*DeliveredMessage) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{4}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeliveredMessage) GetMessageId() string {
@@ -446,7 +612,7 @@ type DequeueResponse struct {
 
 func (x *DequeueResponse) Reset() {
 	*x = DequeueResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[5]
+	mi := &file_queue_v1_queue_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -458,7 +624,7 @@ func (x *DequeueResponse) String() string {
 func (*DequeueResponse) ProtoMessage() {}
 
 func (x *DequeueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[5]
+	mi := &file_queue_v1_queue_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -471,7 +637,7 @@ func (x *DequeueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DequeueResponse.ProtoReflect.Descriptor instead.
 func (*DequeueResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{5}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DequeueResponse) GetMessages() []*DeliveredMessage {
@@ -491,7 +657,7 @@ type AckRequest struct {
 
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[6]
+	mi := &file_queue_v1_queue_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +669,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[6]
+	mi := &file_queue_v1_queue_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +682,7 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{6}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AckRequest) GetSpec() *QueueSpec {
@@ -544,7 +710,7 @@ type NackRequest struct {
 
 func (x *NackRequest) Reset() {
 	*x = NackRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[7]
+	mi := &file_queue_v1_queue_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -556,7 +722,7 @@ func (x *NackRequest) String() string {
 func (*NackRequest) ProtoMessage() {}
 
 func (x *NackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[7]
+	mi := &file_queue_v1_queue_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -569,7 +735,7 @@ func (x *NackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
 func (*NackRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{7}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *NackRequest) GetSpec() *QueueSpec {
@@ -601,7 +767,7 @@ type Empty struct {
 
 func (x *Empty) Reset() {
 	*x = Empty{}
-	mi := &file_queue_v1_queue_proto_msgTypes[8]
+	mi := &file_queue_v1_queue_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -613,7 +779,7 @@ func (x *Empty) String() string {
 func (*Empty) ProtoMessage() {}
 
 func (x *Empty) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[8]
+	mi := &file_queue_v1_queue_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -626,7 +792,7 @@ func (x *Empty) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Empty.ProtoReflect.Descriptor instead.
 func (*Empty) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{8}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{11}
 }
 
 type StatsRequest struct {
@@ -638,7 +804,7 @@ type StatsRequest struct {
 
 func (x *StatsRequest) Reset() {
 	*x = StatsRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[9]
+	mi := &file_queue_v1_queue_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -650,7 +816,7 @@ func (x *StatsRequest) String() string {
 func (*StatsRequest) ProtoMessage() {}
 
 func (x *StatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[9]
+	mi := &file_queue_v1_queue_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -663,7 +829,7 @@ func (x *StatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsRequest.ProtoReflect.Descriptor instead.
 func (*StatsRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{9}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StatsRequest) GetSpec() *QueueSpec {
@@ -685,7 +851,7 @@ type FreezeRequest struct {
 
 func (x *FreezeRequest) Reset() {
 	*x = FreezeRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[10]
+	mi := &file_queue_v1_queue_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -697,7 +863,7 @@ func (x *FreezeRequest) String() string {
 func (*FreezeRequest) ProtoMessage() {}
 
 func (x *FreezeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[10]
+	mi := &file_queue_v1_queue_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -710,7 +876,7 @@ func (x *FreezeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreezeRequest.ProtoReflect.Descriptor instead.
 func (*FreezeRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{10}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FreezeRequest) GetSpec() *QueueSpec {
@@ -748,7 +914,7 @@ type QueueStats struct {
 
 func (x *QueueStats) Reset() {
 	*x = QueueStats{}
-	mi := &file_queue_v1_queue_proto_msgTypes[11]
+	mi := &file_queue_v1_queue_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -760,7 +926,7 @@ func (x *QueueStats) String() string {
 func (*QueueStats) ProtoMessage() {}
 
 func (x *QueueStats) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[11]
+	mi := &file_queue_v1_queue_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -773,7 +939,7 @@ func (x *QueueStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueStats.ProtoReflect.Descriptor instead.
 func (*QueueStats) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{11}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *QueueStats) GetOrg() string {
@@ -870,7 +1036,7 @@ type StatsAllResponse struct {
 
 func (x *StatsAllResponse) Reset() {
 	*x = StatsAllResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[12]
+	mi := &file_queue_v1_queue_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -882,7 +1048,7 @@ func (x *StatsAllResponse) String() string {
 func (*StatsAllResponse) ProtoMessage() {}
 
 func (x *StatsAllResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[12]
+	mi := &file_queue_v1_queue_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -895,7 +1061,7 @@ func (x *StatsAllResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsAllResponse.ProtoReflect.Descriptor instead.
 func (*StatsAllResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{12}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StatsAllResponse) GetNodeId() string {
@@ -929,7 +1095,7 @@ type WireMessage struct {
 
 func (x *WireMessage) Reset() {
 	*x = WireMessage{}
-	mi := &file_queue_v1_queue_proto_msgTypes[13]
+	mi := &file_queue_v1_queue_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +1107,7 @@ func (x *WireMessage) String() string {
 func (*WireMessage) ProtoMessage() {}
 
 func (x *WireMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[13]
+	mi := &file_queue_v1_queue_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +1120,7 @@ func (x *WireMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WireMessage.ProtoReflect.Descriptor instead.
 func (*WireMessage) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{13}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WireMessage) GetId() string {
@@ -1029,7 +1195,7 @@ type SlotMessages struct {
 
 func (x *SlotMessages) Reset() {
 	*x = SlotMessages{}
-	mi := &file_queue_v1_queue_proto_msgTypes[14]
+	mi := &file_queue_v1_queue_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1041,7 +1207,7 @@ func (x *SlotMessages) String() string {
 func (*SlotMessages) ProtoMessage() {}
 
 func (x *SlotMessages) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[14]
+	mi := &file_queue_v1_queue_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1054,7 +1220,7 @@ func (x *SlotMessages) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotMessages.ProtoReflect.Descriptor instead.
 func (*SlotMessages) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{14}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SlotMessages) GetMessages() []*WireMessage {
@@ -1078,7 +1244,7 @@ type Transfer struct {
 
 func (x *Transfer) Reset() {
 	*x = Transfer{}
-	mi := &file_queue_v1_queue_proto_msgTypes[15]
+	mi := &file_queue_v1_queue_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1090,7 +1256,7 @@ func (x *Transfer) String() string {
 func (*Transfer) ProtoMessage() {}
 
 func (x *Transfer) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[15]
+	mi := &file_queue_v1_queue_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1269,7 @@ func (x *Transfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Transfer.ProtoReflect.Descriptor instead.
 func (*Transfer) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{15}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Transfer) GetSpec() *QueueSpec {
@@ -1139,7 +1305,7 @@ type SlotSet struct {
 
 func (x *SlotSet) Reset() {
 	*x = SlotSet{}
-	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	mi := &file_queue_v1_queue_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1151,7 +1317,7 @@ func (x *SlotSet) String() string {
 func (*SlotSet) ProtoMessage() {}
 
 func (x *SlotSet) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[16]
+	mi := &file_queue_v1_queue_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1164,7 +1330,7 @@ func (x *SlotSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlotSet.ProtoReflect.Descriptor instead.
 func (*SlotSet) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{16}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SlotSet) GetSpec() *QueueSpec {
@@ -1201,7 +1367,7 @@ type HeldSlots struct {
 
 func (x *HeldSlots) Reset() {
 	*x = HeldSlots{}
-	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	mi := &file_queue_v1_queue_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1379,7 @@ func (x *HeldSlots) String() string {
 func (*HeldSlots) ProtoMessage() {}
 
 func (x *HeldSlots) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[17]
+	mi := &file_queue_v1_queue_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1392,7 @@ func (x *HeldSlots) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeldSlots.ProtoReflect.Descriptor instead.
 func (*HeldSlots) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{17}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *HeldSlots) GetOrg() string {
@@ -1267,7 +1433,7 @@ type HeldResponse struct {
 
 func (x *HeldResponse) Reset() {
 	*x = HeldResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	mi := &file_queue_v1_queue_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1445,7 @@ func (x *HeldResponse) String() string {
 func (*HeldResponse) ProtoMessage() {}
 
 func (x *HeldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[18]
+	mi := &file_queue_v1_queue_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1458,7 @@ func (x *HeldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeldResponse.ProtoReflect.Descriptor instead.
 func (*HeldResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{18}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HeldResponse) GetNodeId() string {
@@ -1318,7 +1484,7 @@ type SubscribeRequest struct {
 
 func (x *SubscribeRequest) Reset() {
 	*x = SubscribeRequest{}
-	mi := &file_queue_v1_queue_proto_msgTypes[19]
+	mi := &file_queue_v1_queue_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1330,7 +1496,7 @@ func (x *SubscribeRequest) String() string {
 func (*SubscribeRequest) ProtoMessage() {}
 
 func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[19]
+	mi := &file_queue_v1_queue_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1343,7 +1509,7 @@ func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{19}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SubscribeRequest) GetGatewayId() string {
@@ -1366,7 +1532,7 @@ type WorkAvailable struct {
 
 func (x *WorkAvailable) Reset() {
 	*x = WorkAvailable{}
-	mi := &file_queue_v1_queue_proto_msgTypes[20]
+	mi := &file_queue_v1_queue_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +1544,7 @@ func (x *WorkAvailable) String() string {
 func (*WorkAvailable) ProtoMessage() {}
 
 func (x *WorkAvailable) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[20]
+	mi := &file_queue_v1_queue_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +1557,7 @@ func (x *WorkAvailable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkAvailable.ProtoReflect.Descriptor instead.
 func (*WorkAvailable) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{20}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *WorkAvailable) GetOrg() string {
@@ -1425,7 +1591,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_queue_v1_queue_proto_msgTypes[21]
+	mi := &file_queue_v1_queue_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1437,7 +1603,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_queue_v1_queue_proto_msgTypes[21]
+	mi := &file_queue_v1_queue_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1450,7 +1616,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_queue_v1_queue_proto_rawDescGZIP(), []int{21}
+	return file_queue_v1_queue_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *HealthResponse) GetStatus() string {
@@ -1471,7 +1637,7 @@ var File_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x14queue/v1/queue.proto\x12\rryuk.queue.v1\"\xf2\x02\n" +
+	"\x14queue/v1/queue.proto\x12\rryuk.queue.v1\"\x9a\x03\n" +
 	"\tQueueSpec\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x122\n" +
@@ -1486,7 +1652,19 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
 	"generation\x18\n" +
 	" \x01(\x04R\n" +
-	"generation\"\xf2\x01\n" +
+	"generation\x12&\n" +
+	"\x0fhas_dead_letter\x18\v \x01(\bR\rhasDeadLetter\"|\n" +
+	"\n" +
+	"DeadLetter\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slot\x18\x03 \x01(\rR\x04slot\x124\n" +
+	"\amessage\x18\x04 \x01(\v2\x1a.ryuk.queue.v1.WireMessageR\amessage\"R\n" +
+	"\x12DeadLetterResponse\x12<\n" +
+	"\fdead_letters\x18\x01 \x03(\v2\x19.ryuk.queue.v1.DeadLetterR\vdeadLetters\"8\n" +
+	"\x15AckDeadLettersRequest\x12\x1f\n" +
+	"\vmessage_ids\x18\x01 \x03(\tR\n" +
+	"messageIds\"\xf2\x01\n" +
 	"\x0eEnqueueRequest\x12,\n" +
 	"\x04spec\x18\x01 \x01(\v2\x18.ryuk.queue.v1.QueueSpecR\x04spec\x12\x17\n" +
 	"\x04slot\x18\x02 \x01(\rH\x00R\x04slot\x88\x01\x01\x12\x18\n" +
@@ -1587,7 +1765,7 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\rbest_priority\x18\x03 \x01(\rR\fbestPriority\"A\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x17\n" +
-	"\anode_id\x18\x02 \x01(\tR\x06nodeId2\xcd\a\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId2\xe3\b\n" +
 	"\fQueueService\x12H\n" +
 	"\aEnqueue\x12\x1d.ryuk.queue.v1.EnqueueRequest\x1a\x1e.ryuk.queue.v1.EnqueueResponse\x12H\n" +
 	"\aDequeue\x12\x1d.ryuk.queue.v1.DequeueRequest\x1a\x1e.ryuk.queue.v1.DequeueResponse\x126\n" +
@@ -1601,7 +1779,9 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\vDiscardMove\x12\x16.ryuk.queue.v1.SlotSet\x1a\x14.ryuk.queue.v1.Empty\x129\n" +
 	"\tAbortMove\x12\x16.ryuk.queue.v1.SlotSet\x1a\x14.ryuk.queue.v1.Empty\x12?\n" +
 	"\x06Freeze\x12\x1c.ryuk.queue.v1.FreezeRequest\x1a\x17.ryuk.queue.v1.Transfer\x129\n" +
-	"\x04Held\x12\x14.ryuk.queue.v1.Empty\x1a\x1b.ryuk.queue.v1.HeldResponse\x12L\n" +
+	"\x04Held\x12\x14.ryuk.queue.v1.Empty\x1a\x1b.ryuk.queue.v1.HeldResponse\x12F\n" +
+	"\vDeadLetters\x12\x14.ryuk.queue.v1.Empty\x1a!.ryuk.queue.v1.DeadLetterResponse\x12L\n" +
+	"\x0eAckDeadLetters\x12$.ryuk.queue.v1.AckDeadLettersRequest\x1a\x14.ryuk.queue.v1.Empty\x12L\n" +
 	"\tSubscribe\x12\x1f.ryuk.queue.v1.SubscribeRequest\x1a\x1c.ryuk.queue.v1.WorkAvailable0\x01\x12=\n" +
 	"\x06Health\x12\x14.ryuk.queue.v1.Empty\x1a\x1d.ryuk.queue.v1.HealthResponseB<Z:github.com/harryv2/ryuk-dpq/backend/proto/queue/v1;queuev1b\x06proto3"
 
@@ -1617,82 +1797,91 @@ func file_queue_v1_queue_proto_rawDescGZIP() []byte {
 	return file_queue_v1_queue_proto_rawDescData
 }
 
-var file_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_queue_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_queue_v1_queue_proto_goTypes = []any{
-	(*QueueSpec)(nil),        // 0: ryuk.queue.v1.QueueSpec
-	(*EnqueueRequest)(nil),   // 1: ryuk.queue.v1.EnqueueRequest
-	(*EnqueueResponse)(nil),  // 2: ryuk.queue.v1.EnqueueResponse
-	(*DequeueRequest)(nil),   // 3: ryuk.queue.v1.DequeueRequest
-	(*DeliveredMessage)(nil), // 4: ryuk.queue.v1.DeliveredMessage
-	(*DequeueResponse)(nil),  // 5: ryuk.queue.v1.DequeueResponse
-	(*AckRequest)(nil),       // 6: ryuk.queue.v1.AckRequest
-	(*NackRequest)(nil),      // 7: ryuk.queue.v1.NackRequest
-	(*Empty)(nil),            // 8: ryuk.queue.v1.Empty
-	(*StatsRequest)(nil),     // 9: ryuk.queue.v1.StatsRequest
-	(*FreezeRequest)(nil),    // 10: ryuk.queue.v1.FreezeRequest
-	(*QueueStats)(nil),       // 11: ryuk.queue.v1.QueueStats
-	(*StatsAllResponse)(nil), // 12: ryuk.queue.v1.StatsAllResponse
-	(*WireMessage)(nil),      // 13: ryuk.queue.v1.WireMessage
-	(*SlotMessages)(nil),     // 14: ryuk.queue.v1.SlotMessages
-	(*Transfer)(nil),         // 15: ryuk.queue.v1.Transfer
-	(*SlotSet)(nil),          // 16: ryuk.queue.v1.SlotSet
-	(*HeldSlots)(nil),        // 17: ryuk.queue.v1.HeldSlots
-	(*HeldResponse)(nil),     // 18: ryuk.queue.v1.HeldResponse
-	(*SubscribeRequest)(nil), // 19: ryuk.queue.v1.SubscribeRequest
-	(*WorkAvailable)(nil),    // 20: ryuk.queue.v1.WorkAvailable
-	(*HealthResponse)(nil),   // 21: ryuk.queue.v1.HealthResponse
-	nil,                      // 22: ryuk.queue.v1.Transfer.BySlotEntry
+	(*QueueSpec)(nil),             // 0: ryuk.queue.v1.QueueSpec
+	(*DeadLetter)(nil),            // 1: ryuk.queue.v1.DeadLetter
+	(*DeadLetterResponse)(nil),    // 2: ryuk.queue.v1.DeadLetterResponse
+	(*AckDeadLettersRequest)(nil), // 3: ryuk.queue.v1.AckDeadLettersRequest
+	(*EnqueueRequest)(nil),        // 4: ryuk.queue.v1.EnqueueRequest
+	(*EnqueueResponse)(nil),       // 5: ryuk.queue.v1.EnqueueResponse
+	(*DequeueRequest)(nil),        // 6: ryuk.queue.v1.DequeueRequest
+	(*DeliveredMessage)(nil),      // 7: ryuk.queue.v1.DeliveredMessage
+	(*DequeueResponse)(nil),       // 8: ryuk.queue.v1.DequeueResponse
+	(*AckRequest)(nil),            // 9: ryuk.queue.v1.AckRequest
+	(*NackRequest)(nil),           // 10: ryuk.queue.v1.NackRequest
+	(*Empty)(nil),                 // 11: ryuk.queue.v1.Empty
+	(*StatsRequest)(nil),          // 12: ryuk.queue.v1.StatsRequest
+	(*FreezeRequest)(nil),         // 13: ryuk.queue.v1.FreezeRequest
+	(*QueueStats)(nil),            // 14: ryuk.queue.v1.QueueStats
+	(*StatsAllResponse)(nil),      // 15: ryuk.queue.v1.StatsAllResponse
+	(*WireMessage)(nil),           // 16: ryuk.queue.v1.WireMessage
+	(*SlotMessages)(nil),          // 17: ryuk.queue.v1.SlotMessages
+	(*Transfer)(nil),              // 18: ryuk.queue.v1.Transfer
+	(*SlotSet)(nil),               // 19: ryuk.queue.v1.SlotSet
+	(*HeldSlots)(nil),             // 20: ryuk.queue.v1.HeldSlots
+	(*HeldResponse)(nil),          // 21: ryuk.queue.v1.HeldResponse
+	(*SubscribeRequest)(nil),      // 22: ryuk.queue.v1.SubscribeRequest
+	(*WorkAvailable)(nil),         // 23: ryuk.queue.v1.WorkAvailable
+	(*HealthResponse)(nil),        // 24: ryuk.queue.v1.HealthResponse
+	nil,                           // 25: ryuk.queue.v1.Transfer.BySlotEntry
 }
 var file_queue_v1_queue_proto_depIdxs = []int32{
-	0,  // 0: ryuk.queue.v1.EnqueueRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	0,  // 1: ryuk.queue.v1.DequeueRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	4,  // 2: ryuk.queue.v1.DequeueResponse.messages:type_name -> ryuk.queue.v1.DeliveredMessage
-	0,  // 3: ryuk.queue.v1.AckRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	0,  // 4: ryuk.queue.v1.NackRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	0,  // 5: ryuk.queue.v1.StatsRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	0,  // 6: ryuk.queue.v1.FreezeRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
-	11, // 7: ryuk.queue.v1.StatsAllResponse.queues:type_name -> ryuk.queue.v1.QueueStats
-	13, // 8: ryuk.queue.v1.SlotMessages.messages:type_name -> ryuk.queue.v1.WireMessage
-	0,  // 9: ryuk.queue.v1.Transfer.spec:type_name -> ryuk.queue.v1.QueueSpec
-	22, // 10: ryuk.queue.v1.Transfer.by_slot:type_name -> ryuk.queue.v1.Transfer.BySlotEntry
-	0,  // 11: ryuk.queue.v1.SlotSet.spec:type_name -> ryuk.queue.v1.QueueSpec
-	17, // 12: ryuk.queue.v1.HeldResponse.queues:type_name -> ryuk.queue.v1.HeldSlots
-	14, // 13: ryuk.queue.v1.Transfer.BySlotEntry.value:type_name -> ryuk.queue.v1.SlotMessages
-	1,  // 14: ryuk.queue.v1.QueueService.Enqueue:input_type -> ryuk.queue.v1.EnqueueRequest
-	3,  // 15: ryuk.queue.v1.QueueService.Dequeue:input_type -> ryuk.queue.v1.DequeueRequest
-	6,  // 16: ryuk.queue.v1.QueueService.Ack:input_type -> ryuk.queue.v1.AckRequest
-	7,  // 17: ryuk.queue.v1.QueueService.Nack:input_type -> ryuk.queue.v1.NackRequest
-	9,  // 18: ryuk.queue.v1.QueueService.Stats:input_type -> ryuk.queue.v1.StatsRequest
-	8,  // 19: ryuk.queue.v1.QueueService.StatsAll:input_type -> ryuk.queue.v1.Empty
-	9,  // 20: ryuk.queue.v1.QueueService.Drop:input_type -> ryuk.queue.v1.StatsRequest
-	16, // 21: ryuk.queue.v1.QueueService.PrepareMove:input_type -> ryuk.queue.v1.SlotSet
-	15, // 22: ryuk.queue.v1.QueueService.Absorb:input_type -> ryuk.queue.v1.Transfer
-	16, // 23: ryuk.queue.v1.QueueService.DiscardMove:input_type -> ryuk.queue.v1.SlotSet
-	16, // 24: ryuk.queue.v1.QueueService.AbortMove:input_type -> ryuk.queue.v1.SlotSet
-	10, // 25: ryuk.queue.v1.QueueService.Freeze:input_type -> ryuk.queue.v1.FreezeRequest
-	8,  // 26: ryuk.queue.v1.QueueService.Held:input_type -> ryuk.queue.v1.Empty
-	19, // 27: ryuk.queue.v1.QueueService.Subscribe:input_type -> ryuk.queue.v1.SubscribeRequest
-	8,  // 28: ryuk.queue.v1.QueueService.Health:input_type -> ryuk.queue.v1.Empty
-	2,  // 29: ryuk.queue.v1.QueueService.Enqueue:output_type -> ryuk.queue.v1.EnqueueResponse
-	5,  // 30: ryuk.queue.v1.QueueService.Dequeue:output_type -> ryuk.queue.v1.DequeueResponse
-	8,  // 31: ryuk.queue.v1.QueueService.Ack:output_type -> ryuk.queue.v1.Empty
-	8,  // 32: ryuk.queue.v1.QueueService.Nack:output_type -> ryuk.queue.v1.Empty
-	11, // 33: ryuk.queue.v1.QueueService.Stats:output_type -> ryuk.queue.v1.QueueStats
-	12, // 34: ryuk.queue.v1.QueueService.StatsAll:output_type -> ryuk.queue.v1.StatsAllResponse
-	8,  // 35: ryuk.queue.v1.QueueService.Drop:output_type -> ryuk.queue.v1.Empty
-	15, // 36: ryuk.queue.v1.QueueService.PrepareMove:output_type -> ryuk.queue.v1.Transfer
-	8,  // 37: ryuk.queue.v1.QueueService.Absorb:output_type -> ryuk.queue.v1.Empty
-	8,  // 38: ryuk.queue.v1.QueueService.DiscardMove:output_type -> ryuk.queue.v1.Empty
-	8,  // 39: ryuk.queue.v1.QueueService.AbortMove:output_type -> ryuk.queue.v1.Empty
-	15, // 40: ryuk.queue.v1.QueueService.Freeze:output_type -> ryuk.queue.v1.Transfer
-	18, // 41: ryuk.queue.v1.QueueService.Held:output_type -> ryuk.queue.v1.HeldResponse
-	20, // 42: ryuk.queue.v1.QueueService.Subscribe:output_type -> ryuk.queue.v1.WorkAvailable
-	21, // 43: ryuk.queue.v1.QueueService.Health:output_type -> ryuk.queue.v1.HealthResponse
-	29, // [29:44] is the sub-list for method output_type
-	14, // [14:29] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	16, // 0: ryuk.queue.v1.DeadLetter.message:type_name -> ryuk.queue.v1.WireMessage
+	1,  // 1: ryuk.queue.v1.DeadLetterResponse.dead_letters:type_name -> ryuk.queue.v1.DeadLetter
+	0,  // 2: ryuk.queue.v1.EnqueueRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	0,  // 3: ryuk.queue.v1.DequeueRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	7,  // 4: ryuk.queue.v1.DequeueResponse.messages:type_name -> ryuk.queue.v1.DeliveredMessage
+	0,  // 5: ryuk.queue.v1.AckRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	0,  // 6: ryuk.queue.v1.NackRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	0,  // 7: ryuk.queue.v1.StatsRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	0,  // 8: ryuk.queue.v1.FreezeRequest.spec:type_name -> ryuk.queue.v1.QueueSpec
+	14, // 9: ryuk.queue.v1.StatsAllResponse.queues:type_name -> ryuk.queue.v1.QueueStats
+	16, // 10: ryuk.queue.v1.SlotMessages.messages:type_name -> ryuk.queue.v1.WireMessage
+	0,  // 11: ryuk.queue.v1.Transfer.spec:type_name -> ryuk.queue.v1.QueueSpec
+	25, // 12: ryuk.queue.v1.Transfer.by_slot:type_name -> ryuk.queue.v1.Transfer.BySlotEntry
+	0,  // 13: ryuk.queue.v1.SlotSet.spec:type_name -> ryuk.queue.v1.QueueSpec
+	20, // 14: ryuk.queue.v1.HeldResponse.queues:type_name -> ryuk.queue.v1.HeldSlots
+	17, // 15: ryuk.queue.v1.Transfer.BySlotEntry.value:type_name -> ryuk.queue.v1.SlotMessages
+	4,  // 16: ryuk.queue.v1.QueueService.Enqueue:input_type -> ryuk.queue.v1.EnqueueRequest
+	6,  // 17: ryuk.queue.v1.QueueService.Dequeue:input_type -> ryuk.queue.v1.DequeueRequest
+	9,  // 18: ryuk.queue.v1.QueueService.Ack:input_type -> ryuk.queue.v1.AckRequest
+	10, // 19: ryuk.queue.v1.QueueService.Nack:input_type -> ryuk.queue.v1.NackRequest
+	12, // 20: ryuk.queue.v1.QueueService.Stats:input_type -> ryuk.queue.v1.StatsRequest
+	11, // 21: ryuk.queue.v1.QueueService.StatsAll:input_type -> ryuk.queue.v1.Empty
+	12, // 22: ryuk.queue.v1.QueueService.Drop:input_type -> ryuk.queue.v1.StatsRequest
+	19, // 23: ryuk.queue.v1.QueueService.PrepareMove:input_type -> ryuk.queue.v1.SlotSet
+	18, // 24: ryuk.queue.v1.QueueService.Absorb:input_type -> ryuk.queue.v1.Transfer
+	19, // 25: ryuk.queue.v1.QueueService.DiscardMove:input_type -> ryuk.queue.v1.SlotSet
+	19, // 26: ryuk.queue.v1.QueueService.AbortMove:input_type -> ryuk.queue.v1.SlotSet
+	13, // 27: ryuk.queue.v1.QueueService.Freeze:input_type -> ryuk.queue.v1.FreezeRequest
+	11, // 28: ryuk.queue.v1.QueueService.Held:input_type -> ryuk.queue.v1.Empty
+	11, // 29: ryuk.queue.v1.QueueService.DeadLetters:input_type -> ryuk.queue.v1.Empty
+	3,  // 30: ryuk.queue.v1.QueueService.AckDeadLetters:input_type -> ryuk.queue.v1.AckDeadLettersRequest
+	22, // 31: ryuk.queue.v1.QueueService.Subscribe:input_type -> ryuk.queue.v1.SubscribeRequest
+	11, // 32: ryuk.queue.v1.QueueService.Health:input_type -> ryuk.queue.v1.Empty
+	5,  // 33: ryuk.queue.v1.QueueService.Enqueue:output_type -> ryuk.queue.v1.EnqueueResponse
+	8,  // 34: ryuk.queue.v1.QueueService.Dequeue:output_type -> ryuk.queue.v1.DequeueResponse
+	11, // 35: ryuk.queue.v1.QueueService.Ack:output_type -> ryuk.queue.v1.Empty
+	11, // 36: ryuk.queue.v1.QueueService.Nack:output_type -> ryuk.queue.v1.Empty
+	14, // 37: ryuk.queue.v1.QueueService.Stats:output_type -> ryuk.queue.v1.QueueStats
+	15, // 38: ryuk.queue.v1.QueueService.StatsAll:output_type -> ryuk.queue.v1.StatsAllResponse
+	11, // 39: ryuk.queue.v1.QueueService.Drop:output_type -> ryuk.queue.v1.Empty
+	18, // 40: ryuk.queue.v1.QueueService.PrepareMove:output_type -> ryuk.queue.v1.Transfer
+	11, // 41: ryuk.queue.v1.QueueService.Absorb:output_type -> ryuk.queue.v1.Empty
+	11, // 42: ryuk.queue.v1.QueueService.DiscardMove:output_type -> ryuk.queue.v1.Empty
+	11, // 43: ryuk.queue.v1.QueueService.AbortMove:output_type -> ryuk.queue.v1.Empty
+	18, // 44: ryuk.queue.v1.QueueService.Freeze:output_type -> ryuk.queue.v1.Transfer
+	21, // 45: ryuk.queue.v1.QueueService.Held:output_type -> ryuk.queue.v1.HeldResponse
+	2,  // 46: ryuk.queue.v1.QueueService.DeadLetters:output_type -> ryuk.queue.v1.DeadLetterResponse
+	11, // 47: ryuk.queue.v1.QueueService.AckDeadLetters:output_type -> ryuk.queue.v1.Empty
+	23, // 48: ryuk.queue.v1.QueueService.Subscribe:output_type -> ryuk.queue.v1.WorkAvailable
+	24, // 49: ryuk.queue.v1.QueueService.Health:output_type -> ryuk.queue.v1.HealthResponse
+	33, // [33:50] is the sub-list for method output_type
+	16, // [16:33] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_queue_v1_queue_proto_init() }
@@ -1700,14 +1889,14 @@ func file_queue_v1_queue_proto_init() {
 	if File_queue_v1_queue_proto != nil {
 		return
 	}
-	file_queue_v1_queue_proto_msgTypes[1].OneofWrappers = []any{}
+	file_queue_v1_queue_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queue_v1_queue_proto_rawDesc), len(file_queue_v1_queue_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

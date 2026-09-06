@@ -60,6 +60,7 @@ type QueueSpec struct {
 	StarvationReserve   float64       `json:"starvationReserve"`
 	MaxDepth            int64         `json:"maxDepth"`
 	Distributed         bool          `json:"distributed"`
+	HasDeadLetter       bool          `json:"hasDeadLetter"`
 	Generation          uint64        `json:"generation"`
 }
 
@@ -74,6 +75,7 @@ func (c QueueConfig) Spec() QueueSpec {
 		StarvationReserve:   c.Settings.StarvationReserve,
 		MaxDepth:            c.Settings.MaxDepth,
 		Distributed:         c.Distributed,
+		HasDeadLetter:       c.Settings.DeadLetterQueue != "",
 		Generation:          c.Generation,
 	}
 }
@@ -98,6 +100,12 @@ type NodeGRPCRepo interface {
 	AbortMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) error
 
 	Held(ctx context.Context, addr string) (HeldResponse, error)
+
+	// DeadLetters reads what a node has given up on; AckDeadLetters drops them
+	// once the gateway has moved them. Two calls on purpose: draining and
+	// dropping in one would lose the messages if the gateway died in between.
+	DeadLetters(ctx context.Context, addr string) ([]DeadLetterItem, error)
+	AckDeadLetters(ctx context.Context, addr string, ids []string) error
 
 	Freeze(ctx context.Context, addr string, spec QueueSpec, slots []uint16) (Transfer, error)
 	Absorb(ctx context.Context, addr string, t Transfer) error
@@ -142,4 +150,15 @@ type HeldSlots struct {
 type HeldResponse struct {
 	NodeID string
 	Queues []HeldSlots
+}
+
+// DeadLetterItem is a message a node gave up on. The node cannot route it
+// itself -- it does not know which node owns the dead-letter queue, and
+// placement is the gateway's to read -- so it holds them and the gateway moves
+// them.
+type DeadLetterItem struct {
+	Org      string
+	Name     string
+	Message  NodeMessage
+	Attempts uint32
 }

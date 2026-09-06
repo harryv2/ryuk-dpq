@@ -77,6 +77,11 @@ Anything both services must agree on goes in `backend/slotting` or
   heaps and deques and are skipped when they surface. Do not "tidy" them.
 - **`AppendEnqueue` flushes before the message is visible.** The other journal
   calls are buffered. Reversing that loses messages on a crash.
+- **A dead letter is moved by the gateway, not the node.** The node holds what
+  it gave up on and writes it to `dead-letters.log`; the gateway drains it and
+  re-enqueues. The node only drops it once the gateway confirms.
+- **No dead-letter queue means never dropping the message.** It keeps being
+  redelivered. `engine.Config.HasDeadLetter` is what switches that.
 - **Carry a slot id, do not recompute it.** Deriving it from the group key gives
   the wrong answer for an ungrouped message.
 

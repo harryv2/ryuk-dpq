@@ -2,6 +2,9 @@ package entity
 
 import "time"
 
+// CreateQueueRequest is the wire shape: durations arrive as strings like "30s",
+// and MaxRetries is a pointer so that 0 (never retry) is distinguishable from
+// absent (use the default).
 type CreateQueueRequest struct {
 	Org                 string  `json:"-"`
 	Name                string  `json:"name"`
@@ -15,14 +18,14 @@ type CreateQueueRequest struct {
 	Distributed         bool    `json:"distributed,omitempty"`
 	PlacementWidth      int     `json:"placementWidth,omitempty"`
 
-	// Settings holds the fields above once the controller has parsed and
-	// defaulted them.
-	Settings QueueSettings `json:"-"`
+	// The fields above, parsed and defaulted by the controller. Everything
+	// downstream reads this and never the raw strings.
+	ParseQueueSettings QueueSettings `json:"-"`
 }
 
-// UpdateQueueRequest carries the same fields as creation, so one validator and
-// one set of defaults serve both. The ones that are fixed at creation are
-// rejected rather than ignored.
+// UpdateQueueRequest reuses creation's fields so one validator serves both.
+// Distributed is a pointer here only so that setting it can be refused rather
+// than silently ignored.
 type UpdateQueueRequest struct {
 	CreateQueueRequest
 	Distributed *bool `json:"distributed,omitempty"`

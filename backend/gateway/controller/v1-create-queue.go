@@ -64,7 +64,7 @@ func parseAndValidateCreateQueueRequest(r *http.Request, org string) (entity.Cre
 		}
 	}
 
-	if req.Settings, err = settingsFrom(req); err != nil {
+	if req.ParseQueueSettings, err = settingsFrom(req); err != nil {
 		return req, err
 	}
 	return req, nil

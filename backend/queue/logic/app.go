@@ -30,6 +30,9 @@ type QueueLogicInterface interface {
 	Drop(engine.QueueKey) error
 	Held() []engine.QueueKey
 
+	DeadLetters() entity.DeadLetterResponse
+	AckDeadLetters([]string) error
+
 	Freeze(entity.QueueSpec, []uint16) (map[uint16][]entity.WireMessage, error)
 	PrepareMove(entity.QueueSpec, []uint16) (map[uint16][]entity.WireMessage, error)
 	DiscardMove(entity.QueueSpec, []uint16) error
@@ -58,8 +61,7 @@ type QueueLogic struct {
 	mu     sync.RWMutex
 	queues map[engine.QueueKey]*liveQueue
 
-	deadLetters chan deadLetter
-	subs        *subscribers
+	subs *subscribers
 }
 
 // liveQueue pairs an engine with the log it writes to. Both are per queue,
@@ -67,11 +69,12 @@ type QueueLogic struct {
 type liveQueue struct {
 	q   *engine.Queue
 	wal entity.WALRepo
-}
 
-type deadLetter struct {
-	Key engine.QueueKey
-	Msg *engine.Message
+	// Messages this queue has given up on, waiting for the gateway to move
+	// them. Held until it confirms they landed, so a gateway that dies in
+	// between costs a duplicate rather than the message.
+	dlMu sync.Mutex
+	dl   map[string]entity.PendingDeadLetter
 }
 
 func New(cfg Config, log *slog.Logger, clock engine.Clock, wals entity.WALFactory) *QueueLogic {
@@ -79,14 +82,13 @@ func New(cfg Config, log *slog.Logger, clock engine.Clock, wals entity.WALFactor
 		cfg.SweepEvery = 200 * time.Millisecond
 	}
 	return &QueueLogic{
-		cfg:         cfg,
-		log:         log,
-		clock:       clock,
-		cluster:     engine.NewLocalCluster(),
-		wals:        wals,
-		queues:      make(map[engine.QueueKey]*liveQueue),
-		deadLetters: make(chan deadLetter, 1024),
-		subs:        newSubscribers(),
+		cfg:     cfg,
+		log:     log,
+		clock:   clock,
+		cluster: engine.NewLocalCluster(),
+		wals:    wals,
+		queues:  make(map[engine.QueueKey]*liveQueue),
+		subs:    newSubscribers(),
 	}
 }
 

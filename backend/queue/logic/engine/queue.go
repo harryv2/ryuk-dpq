@@ -16,6 +16,10 @@ type Config struct {
 	StarvationReserve   float64
 	MaxDepth            int64
 	Distributed         bool
+	// HasDeadLetter says whether failures have anywhere to go. Without it a
+	// message that runs out of retries keeps being redelivered rather than
+	// being dropped, because dropping it would be a silent loss.
+	HasDeadLetter bool
 }
 
 func (c *Config) applyDefaults() {
@@ -272,7 +276,8 @@ func (q *Queue) Nack(r Receipt, delay time.Duration) (*Message, error) {
 	}
 	s := q.slot(r.Slot)
 	s.mu.Lock()
-	dead, err := s.nack(r, delay, q.clock.Now(), q.cfg().MaxRetries)
+	c := q.cfg()
+	dead, err := s.nack(r, delay, q.clock.Now(), c.MaxRetries, c.HasDeadLetter)
 	s.mu.Unlock()
 	if err == nil && dead != nil {
 		q.depth.Add(-1)
@@ -316,7 +321,7 @@ func (q *Queue) Sweep() SweepResult {
 		}
 		s.mu.Lock()
 		res.Released += s.releaseDelayed(now)
-		dead, requeued := s.sweepLeases(now, q.cfg().MaxRetries)
+		dead, requeued := s.sweepLeases(now, q.cfg().MaxRetries, q.cfg().HasDeadLetter)
 		res.Redelivered += requeued
 		res.Expired += s.sweepTTL(now)
 		st := s.stats(now)

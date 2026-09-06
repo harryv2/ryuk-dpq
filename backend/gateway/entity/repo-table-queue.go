@@ -24,9 +24,8 @@ type QueueSettings struct {
 	StarvationReserve   float64       `json:"starvationReserve"`
 	MaxDepth            int64         `json:"maxDepth"`
 	DeadLetterQueue     string        `json:"deadLetterQueue,omitempty"`
-	// PlacementWidth is how many machines a distributed queue may use. Fixed at
-	// creation: changing it re-derives the candidate set and would move most of
-	// the queue.
+	// Fixed at creation: changing it re-derives the candidate set and would
+	// move most of the queue.
 	PlacementWidth int `json:"placementWidth,omitempty"`
 }
 

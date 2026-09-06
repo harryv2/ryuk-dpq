@@ -22,6 +22,7 @@ func specFrom(p *pb.QueueSpec) entity.QueueSpec {
 		StarvationReserve:   p.StarvationReserve,
 		MaxDepth:            p.MaxDepth,
 		Distributed:         p.Distributed,
+		HasDeadLetter:       p.HasDeadLetter,
 		Generation:          p.Generation,
 	}
 }
@@ -37,6 +38,7 @@ func specTo(s entity.QueueSpec) *pb.QueueSpec {
 		StarvationReserve:     s.StarvationReserve,
 		MaxDepth:              s.MaxDepth,
 		Distributed:           s.Distributed,
+		HasDeadLetter:         s.HasDeadLetter,
 		Generation:            s.Generation,
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 // sweepLeases expires leases whose deadline has passed. Returns messages that
 // have exhausted their attempts; the caller routes them to a dead-letter queue.
-func (s *slot) sweepLeases(now time.Time, maxRetries uint32) (dead []*Message, requeued int) {
+func (s *slot) sweepLeases(now time.Time, maxRetries uint32, deadLetter bool) (dead []*Message, requeued int) {
 	for s.timers.Len() > 0 && !s.timers[0].at.After(now) {
 		e := heap.Pop(&s.timers).(timerEntry)
 		l, ok := s.inflight[e.id]
@@ -18,7 +18,7 @@ func (s *slot) sweepLeases(now time.Time, maxRetries uint32) (dead []*Message, r
 		delete(s.inflight, e.id)
 		s.st.inflight--
 
-		m, back := s.retire(l, now, maxRetries, 0)
+		m, back := s.retire(l, now, maxRetries, 0, deadLetter)
 		if m != nil {
 			dead = append(dead, m)
 		}
@@ -37,7 +37,9 @@ func (s *slot) sweepLeases(now time.Time, maxRetries uint32) (dead []*Message, r
 // it was the group's head and group order is strict; the group goes to the TAIL
 // of its band, so a message that keeps failing does not block the band head
 // every cycle.
-func (s *slot) retire(l *lease, now time.Time, maxRetries uint32, delay time.Duration) (*Message, bool) {
+func (s *slot) retire(
+	l *lease, now time.Time, maxRetries uint32, delay time.Duration, deadLetter bool,
+) (*Message, bool) {
 	g, m := l.g, l.msg
 	g.locked = false
 
@@ -47,7 +49,10 @@ func (s *slot) retire(l *lease, now time.Time, maxRetries uint32, delay time.Dur
 		s.st.bytes -= int64(len(m.Payload))
 		s.dropGroupIfIdle(g)
 		return nil, false
-	case m.Attempts >= maxRetries:
+	// Out of retries, and there is a dead-letter queue to move it to. Without
+	// one the message stays and keeps being redelivered: dropping it here
+	// would lose it with nothing to show for it.
+	case m.Attempts >= maxRetries && deadLetter:
 		s.st.deadLettered++
 		s.st.bytes -= int64(len(m.Payload))
 		s.dropGroupIfIdle(g)
@@ -72,7 +77,9 @@ func (s *slot) retire(l *lease, now time.Time, maxRetries uint32, delay time.Dur
 	return nil, true
 }
 
-func (s *slot) nack(r Receipt, delay time.Duration, now time.Time, maxRetries uint32) (*Message, error) {
+func (s *slot) nack(
+	r Receipt, delay time.Duration, now time.Time, maxRetries uint32, deadLetter bool,
+) (*Message, error) {
 	l, ok := s.inflight[r.MessageID]
 	if !ok {
 		return nil, ErrNotInFlight
@@ -82,7 +89,7 @@ func (s *slot) nack(r Receipt, delay time.Duration, now time.Time, maxRetries ui
 	}
 	delete(s.inflight, r.MessageID)
 	s.st.inflight--
-	dead, _ := s.retire(l, now, maxRetries, delay)
+	dead, _ := s.retire(l, now, maxRetries, delay, deadLetter)
 	s.refreshHint()
 	return dead, nil
 }

@@ -19,7 +19,7 @@ func (l *QueueLogic) Sweep() {
 	for key, lq := range snapshot {
 		res := lq.q.Sweep()
 		for _, d := range res.DeadLettered {
-			l.offerDeadLetter(key, d.Msg)
+			l.offerDeadLetter(key, d.Slot, d.Msg)
 		}
 		if n := res.Redelivered + res.Released; n > 0 {
 			l.notifyWork(key, 0, n)

@@ -54,7 +54,7 @@ func TestCreateQueueRejectsMissingDeadLetterQueue(t *testing.T) {
 
 	_, err := l.CreateQueue(context.Background(), entity.CreateQueueRequest{
 		Org: "org1", Name: "q",
-		Settings: entity.QueueSettings{DeadLetterQueue: "dlq"},
+		ParseQueueSettings: entity.QueueSettings{DeadLetterQueue: "dlq"},
 	})
 	if err == nil || enterr.CodeOf(err) != enterr.CodeInvalid {
 		t.Fatalf("want an invalid-config error, got %v", err)
@@ -69,7 +69,7 @@ func TestCreateQueueAcceptsExistingDeadLetterQueue(t *testing.T) {
 
 	if _, err := l.CreateQueue(context.Background(), entity.CreateQueueRequest{
 		Org: "org1", Name: "q",
-		Settings: entity.QueueSettings{DeadLetterQueue: "dlq"},
+		ParseQueueSettings: entity.QueueSettings{DeadLetterQueue: "dlq"},
 	}); err != nil {
 		t.Fatal(err)
 	}

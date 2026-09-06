@@ -17,6 +17,8 @@ const (
 	kindEnqueue recordKind = iota + 1
 	kindAttempt
 	kindTerminal
+	kindDeadLetter
+	kindDeadLetterDrained
 )
 
 // header is length + crc + kind. The crc covers the payload only.

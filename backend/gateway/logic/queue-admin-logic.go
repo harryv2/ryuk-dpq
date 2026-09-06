@@ -2,6 +2,9 @@ package logic
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/harryv2/ryuk-dpq/backend/constants"
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
@@ -9,7 +12,7 @@ import (
 )
 
 func (l *GatewayLogic) CreateQueue(ctx context.Context, req entity.CreateQueueRequest) (entity.CreateQueueResponse, error) {
-	settings := req.Settings
+	settings := req.ParseQueueSettings
 
 	// The dead-letter queue has to exist now. Checking it only when a message
 	// runs out of retries would lose the message and report nothing.
@@ -73,6 +76,19 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	if err != nil {
 		return err
 	}
+	// Deleting a queue that failures are routed to would leave those queues
+	// with nowhere to put them, which surfaces much later as messages that
+	// never go away. Refuse, and name what depends on it.
+	if users, err := l.deadLetterUsers(ctx, org, name); err != nil {
+		return err
+	} else if len(users) > 0 {
+		// A conflict with what exists, not a malformed request -- same shape as
+		// creating a queue that already exists with other settings.
+		return enterr.New(enterr.CodeConflict, fmt.Sprintf(
+			"%q is the dead-letter queue for %s; point them elsewhere first",
+			name, strings.Join(users, ", ")))
+	}
+
 	// Mark first so gateways stop accepting, then drop the data, then remove
 	// the row: the deletion has to reach the owner before the name is free.
 	if err := l.queueTableRepo.SetState(ctx, org, name, entity.StateDeleting); err != nil {
@@ -91,6 +107,22 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	}
 	l.evictCache(queueCacheKey(org, name))
 	return nil
+}
+
+// deadLetterUsers lists the queues that send their failures to this one.
+func (l *GatewayLogic) deadLetterUsers(ctx context.Context, org, name string) ([]string, error) {
+	cfgs, err := l.queueTableRepo.ListByOrg(ctx, org)
+	if err != nil {
+		return nil, enterr.Internal("list queues", err)
+	}
+	var out []string
+	for _, c := range cfgs {
+		if c.Name != name && c.Settings.DeadLetterQueue == name {
+			out = append(out, c.Name)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func (l *GatewayLogic) ListQueues(ctx context.Context, org string) ([]entity.QueueSummary, error) {

@@ -487,6 +487,7 @@ func TestDeadLetterExactlyOnce(t *testing.T) {
 	q, clk := newTestQueue(t, func(c *Config) {
 		c.VisibilityTimeout = time.Millisecond
 		c.MaxRetries = retries
+		c.HasDeadLetter = true
 		c.StarvationReserve = 0
 	})
 	for i := 0; i < total; i++ {

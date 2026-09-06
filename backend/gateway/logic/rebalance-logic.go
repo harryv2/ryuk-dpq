@@ -214,9 +214,9 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 	return done > 0
 }
 
-// migrate hands a queue and its messages to a new owner: freeze, ship, record,
-// release. The generation is bumped so the new owner's sequence numbers sort
-// after the old owner's.
+// migrate hands a whole queue to a new owner. Same four phases as a slot move:
+// the old owner holds a copy until placement has moved, so a gateway that dies
+// part way through leaves the messages somewhere rather than nowhere.
 func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from, to entity.Member) error {
 	// One gateway at a time. Whoever flips the state to migrating owns the move.
 	if err := l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
@@ -227,27 +227,43 @@ func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from
 		l.evictCache(queueCacheKey(cfg.Org, cfg.Name))
 	}()
 
+	spec := cfg.Spec()
+	slots := everySlot(slotCountFor(cfg.Distributed))
+	moveID := newMoveID()
+	nextGen := cfg.Generation + 1
+
 	l.log.Info("migrating queue", "org", cfg.Org, "queue", cfg.Name,
 		"from", from.ID, "to", to.ID)
 
-	transfer, err := l.nodesGRPCRepo.Freeze(ctx, from.Addr, cfg.Spec(), nil)
+	// 1. Hold the slots and take copies. Nothing is removed yet.
+	transfer, err := l.nodesGRPCRepo.PrepareMove(ctx, from.Addr, spec, slots, moveID)
 	if err != nil {
-		l.log.Warn("migrate: freeze", "queue", cfg.Name, "err", err)
+		l.log.Warn("migrate: prepare", "queue", cfg.Name, "err", err)
 		return err
 	}
-
-	nextGen := cfg.Generation + 1
-	transfer.Spec = cfg.Spec()
+	transfer.Spec = spec
 	transfer.Spec.Generation = nextGen
+	transfer.MoveID = moveID
 
+	// 2. Put them on the new owner, which writes them to its log before they
+	//    become visible. Placement still names the old owner.
 	if err := l.nodesGRPCRepo.Absorb(ctx, to.Addr, transfer); err != nil {
-		l.log.Warn("migrate: absorb", "queue", cfg.Name, "err", err)
+		l.log.Warn("migrate: absorb, putting the queue back", "queue", cfg.Name, "err", err)
+		l.abort(ctx, from.Addr, spec, slots, moveID)
 		return err
 	}
+
+	// 3. The commit. From here the new owner serves the queue.
 	if err := l.queueTableRepo.SetOwner(ctx, cfg.Org, cfg.Name, to.ID, nextGen); err != nil {
+		l.log.Warn("migrate: record, putting the queue back", "queue", cfg.Name, "err", err)
+		l.abort(ctx, from.Addr, spec, slots, moveID)
 		return err
 	}
-	_ = l.nodesGRPCRepo.Drop(ctx, from.Addr, cfg.Spec())
+
+	// 4. Only now is it safe for the old owner to let go.
+	if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, spec, slots, moveID); err != nil {
+		l.log.Warn("migrate: discard, the reconciler will clean up", "queue", cfg.Name, "err", err)
+	}
 
 	count := 0
 	for _, msgs := range transfer.BySlot {
@@ -256,4 +272,12 @@ func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from
 	l.log.Info("migrated queue", "org", cfg.Org, "queue", cfg.Name,
 		"to", to.ID, "messages", count, "generation", nextGen)
 	return nil
+}
+
+func everySlot(n int) []uint16 {
+	out := make([]uint16, n)
+	for i := range out {
+		out[i] = uint16(i)
+	}
+	return out
 }

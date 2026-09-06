@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -142,7 +143,7 @@ func TestVisibilityTimeoutRedelivers(t *testing.T) {
 }
 
 func TestDeadLetterAfterMaxRetries(t *testing.T) {
-	q, clk := newTestQueue(t, func(c *Config) { c.MaxRetries = 2 })
+	q, clk := newTestQueue(t, func(c *Config) { c.MaxRetries = 2; c.HasDeadLetter = true })
 	m := enq(t, q, Medium, "")
 
 	for i := 0; i < 2; i++ {
@@ -584,7 +585,7 @@ func TestReconfigureAppliesToTheNextDeliveryOnly(t *testing.T) {
 // The retry limit is read when a delivery fails, not when it is handed out, so
 // lowering it reaches messages that are already in flight.
 func TestLoweringRetriesAppliesToMessagesAlreadyDelivered(t *testing.T) {
-	q, _ := newTestQueue(t, func(c *Config) { c.MaxRetries = 5 })
+	q, _ := newTestQueue(t, func(c *Config) { c.MaxRetries = 5; c.HasDeadLetter = true })
 	enq(t, q, High, "")
 
 	for i := 0; i < 3; i++ {
@@ -620,6 +621,7 @@ func TestDeadLetterTerminalGoesToTheSlotTheMessageIsIn(t *testing.T) {
 		Key:               QueueKey{Org: "org1", Name: "orders"},
 		VisibilityTimeout: time.Second,
 		MaxRetries:        1,
+		HasDeadLetter:     true,
 	}, clk, NewLocalCluster(), j, 1)
 
 	// Ungrouped, and placed by slot the way the gateway places one.
@@ -652,4 +654,159 @@ type recordingJournal struct {
 
 func (r *recordingJournal) AppendTerminal(slot uint16, id string, _ TerminalKind) {
 	r.terminals[id] = slot
+}
+
+// The brief defines this one precisely: the age of the oldest non-expired,
+// non-in-flight message. Both exclusions matter -- counting an in-flight
+// message would make a queue that is being worked look stuck, and counting an
+// expired one would make a number that never comes down.
+func TestOldestAgeIgnoresInFlightAndExpiredMessages(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+
+	enq(t, q, High, "") // this one gets taken
+	clk.Advance(60 * time.Second)
+	enq(t, q, Medium, "") // this one stays ready
+
+	if _, _, ok := q.Dequeue(); !ok {
+		t.Fatal("expected the high-priority message")
+	}
+	// The oldest message is now in flight, so the age is the younger one's.
+	if got := q.Stats().OldestAge; got != 0 {
+		t.Fatalf("oldest age = %v, want the ready message's age, not the in-flight one's", got)
+	}
+
+	clk.Advance(30 * time.Second)
+	if got := q.Stats().OldestAge; got != 30*time.Second {
+		t.Fatalf("oldest age = %v, want 30s", got)
+	}
+}
+
+func TestOldestAgeIgnoresExpiredMessages(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+
+	if _, err := q.Enqueue(EnqueueOptions{Payload: []byte("x"), Priority: High, TTL: 10 * time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(20 * time.Second) // past its TTL
+	enq(t, q, Medium, "")
+
+	q.Sweep() // expiry is what drops it out of the count
+	if got := q.Stats().OldestAge; got != 0 {
+		t.Fatalf("oldest age = %v, want the live message's age; the expired one must not count", got)
+	}
+}
+
+// Metric 5 in the brief: messages moved to the dead-letter queue, per queue.
+func TestDeadLetteredCountIsReported(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) { c.MaxRetries = 1; c.HasDeadLetter = true })
+	enq(t, q, High, "")
+
+	if got := q.Stats().DeadLettered; got != 0 {
+		t.Fatalf("dead-lettered starts at %d", got)
+	}
+	mustDequeue(t, q)
+	clk.Advance(31 * time.Second)
+	q.Sweep()
+
+	if got := q.Stats().DeadLettered; got != 1 {
+		t.Fatalf("dead-lettered = %d, want 1", got)
+	}
+}
+
+// The brief: a dequeued message is "not visible to other consumers" until it is
+// acknowledged or its visibility timeout expires.
+func TestATakenMessageIsNotHandedOutAgain(t *testing.T) {
+	q, _ := newTestQueue(t)
+	m := enq(t, q, High, "")
+
+	first, _ := mustDequeue(t, q)
+	if first.ID != m.ID {
+		t.Fatal("wrong message")
+	}
+	if got, _, ok := q.Dequeue(); ok {
+		t.Fatalf("the same message was handed out twice: %s", got.ID)
+	}
+}
+
+// The brief: enqueue returns a unique message ID.
+func TestMessageIDsAreUnique(t *testing.T) {
+	q, _ := newTestQueue(t)
+	seen := map[string]bool{}
+	for i := 0; i < 2000; i++ {
+		m := enq(t, q, High, "")
+		if seen[m.ID] {
+			t.Fatalf("message id %s was issued twice", m.ID)
+		}
+		seen[m.ID] = true
+	}
+}
+
+// Acknowledging something that is not in flight -- already acked, already
+// dead-lettered, or never real -- is not an error. A retried ack must not fail.
+func TestAckingTwiceIsNotAnError(t *testing.T) {
+	q, _ := newTestQueue(t)
+	enq(t, q, High, "")
+	_, r := mustDequeue(t, q)
+
+	if err := q.Ack(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Ack(r); !errors.Is(err, ErrNotInFlight) {
+		t.Fatalf("second ack returned %v, want ErrNotInFlight for the caller to treat as success", err)
+	}
+}
+
+// Without a dead-letter queue there is nowhere to put a message that keeps
+// failing, and dropping it would be a silent loss. So it stays and keeps being
+// redelivered -- the operator sees a message that will not go away, which is
+// the honest signal.
+func TestWithoutADeadLetterQueueAMessageKeepsComingBack(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) {
+		c.MaxRetries = 2
+		c.HasDeadLetter = false
+	})
+	m := enq(t, q, High, "")
+
+	for round := 0; round < 6; round++ {
+		got, r := mustDequeue(t, q)
+		if got.ID != m.ID {
+			t.Fatalf("round %d: got a different message", round)
+		}
+		if dead, err := q.Nack(r, 0); err != nil || dead != nil {
+			t.Fatalf("round %d: dead=%v err=%v — nothing should be given up on", round, dead, err)
+		}
+	}
+	if got := q.Stats().DeadLettered; got != 0 {
+		t.Fatalf("dead-lettered %d with no queue to put them in", got)
+	}
+	st := q.Stats()
+	if got := st.ReadyTotal(); got != 1 {
+		t.Fatalf("ready = %d, want the message still waiting", got)
+	}
+
+	// The TTL is what eventually removes it, not the retry limit.
+	clk.Advance(2 * time.Hour)
+	_ = q.Sweep()
+}
+
+// With one configured, the retry limit does what it says.
+func TestWithADeadLetterQueueTheRetryLimitApplies(t *testing.T) {
+	q, _ := newTestQueue(t, func(c *Config) {
+		c.MaxRetries = 2
+		c.HasDeadLetter = true
+	})
+	enq(t, q, High, "")
+
+	_, r1 := mustDequeue(t, q)
+	if dead, _ := q.Nack(r1, 0); dead != nil {
+		t.Fatal("gave up after one attempt")
+	}
+	_, r2 := mustDequeue(t, q)
+	dead, err := q.Nack(r2, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dead == nil {
+		t.Fatal("expected the message to be dead-lettered on the second failure")
+	}
 }

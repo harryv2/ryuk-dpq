@@ -18,6 +18,9 @@ func (l *QueueLogic) Recover() error {
 			l.log.Error("recover: open", "org", key.Org, "queue", key.Name, "err", err)
 			continue
 		}
+		if n := l.recoverDeadLetters(lq); n > 0 {
+			l.log.Info("dead letters recovered", "org", key.Org, "queue", key.Name, "messages", n)
+		}
 		bySlot, err := lq.wal.Replay()
 		if err != nil {
 			l.log.Error("recover: replay", "org", key.Org, "queue", key.Name, "err", err)

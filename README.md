@@ -149,6 +149,48 @@ one **fails** — the retry limit — applies to messages already handed out, so
 lowering it can dead-letter them on their next failure. Nodes pick the change up
 on their next request, because the settings travel with every one.
 
+### Dead-letter queues
+
+A message that runs out of retries is **moved** to the queue's
+`deadLetterQueue`, not just counted and dropped.
+
+The node that holds the message cannot do the move itself. It does not know
+which node owns the dead-letter queue — placement lives in Postgres, which
+nodes deliberately never read. So the node keeps what it gave up on, and the
+gateway, which knows both, drains it every few seconds and re-enqueues it
+through the ordinary path.
+
+Three things follow from that:
+
+- **The node keeps them until the gateway confirms they landed.** Draining and
+  dropping in one call would lose them if the gateway died in between. The cost
+  is a possible duplicate in the dead-letter queue, which is a much better
+  failure than a missing message.
+- **They are written to disk before the gateway is told.** A node that restarts
+  in the middle still knows it owes them, and picks up where it left off.
+- **No dead-letter queue means the message is never dropped.** It keeps being
+  redelivered instead. Dropping it would be a silent loss, and a message that
+  will not go away is the honest signal. Only the TTL removes it.
+
+A queue that failures are routed to cannot be deleted while anything still
+points at it — the API refuses and names the queues that depend on it.
+
+### Why acknowledge takes a receipt, not a message ID
+
+The brief says "acknowledge by ID". Ryuk hands back a **receipt** instead, and
+that is deliberate.
+
+A message can be delivered more than once. If a worker is slow and its
+visibility timeout runs out, the message goes to somebody else. If the first
+worker then acknowledges by message ID, it deletes work the second worker is in
+the middle of doing.
+
+So the receipt names the *delivery*, not the message. It carries the slot, the
+message id, and a number that goes up on every delivery. When an acknowledgement
+arrives with an old number, the node rejects it. Same reason SQS gives you a
+receipt handle. It also carries the slot, which lets any gateway route the
+acknowledgement to the right node without a lookup.
+
 A Postman collection covering every endpoint is in
 [`docs/postman/`](docs/postman/) — import both files, pick the "Ryuk — local"
 environment, and the poll request saves the receipt so acknowledge works
@@ -294,6 +336,24 @@ Prometheus is optional. Without `RYUK_PROMETHEUS` the endpoint answers
 which only covers the time the tab has been open. It is at <http://localhost:9091>
 with seven days of retention.
 
+## Filling it with data
+
+`make up` gives you an empty system. To get something worth looking at:
+
+```bash
+make seed                              # 12 queues per tenant, 150 messages each
+make seed QUEUES=40 MESSAGES=500       # more
+make seed RESET=1                      # clear what is there first
+```
+
+It builds a spread rather than a uniform pile: single-node and distributed
+queues at several placement widths, priorities across the whole 0-100 scale,
+grouped and ungrouped messages, a few delayed, some acknowledged so the
+throughput charts have a rate, some left in flight, and some nacked until they
+dead-letter. Two tenants, so the org switcher does something.
+
+3,600 messages across 24 queues takes about three seconds.
+
 ## Testing
 
 ```bash
@@ -302,8 +362,58 @@ make test-race      # the same under the race detector
 make integration    # the real stack in Docker, driven through the REST API
 ```
 
-The integration suite is Gherkin scenarios run by godog — see
-[`integration/`](integration/README.md).
+Five kinds of test, each for a different kind of mistake.
+
+**Engine tests** cover the queue itself with a fake clock, so a visibility
+timeout is tested by moving time forward instead of sleeping. Priority order,
+FIFO inside a priority, group ordering, retries, dead-lettering, TTL, delayed
+delivery.
+
+**Race tests** are the ones that matter most, because the engine is concurrent.
+Many producers and consumers hammer one queue while the sweeper runs, and at the
+end the test checks the things that must always hold: every message reached
+exactly one end state, nothing was acknowledged twice, nothing was handed to two
+workers, group order held, the queue is empty. `go test -race` has caught real
+bugs here that plain `go test` did not — one of them was `Dequeue` returning a
+pointer the slot was still writing to.
+
+**Logic tests** use generated mocks for Postgres, etcd and the node clients, so
+routing, placement, caching and the migration protocol can be tested without any
+infrastructure.
+
+**Integration tests** are Gherkin scenarios run by godog against a real Docker
+cluster through the public API — 28 of them. This is where scaling and failure
+live: adding nodes, killing a node, restarting one and checking it replays its
+log. See [`integration/`](integration/README.md).
+
+**A load harness** (`backend/tests/harness`) runs many producers and consumers
+against a running service and checks the same invariants under real traffic:
+
+```bash
+go run ./backend/tests/harness -producers 8 -consumers 8 -messages 500
+```
+
+Where correctness depends on timing, the test forces the timing rather than
+hoping for it. The migration tests are the clearest example: rather than trying
+to crash a gateway at the right microsecond, they check the property directly —
+after the first step of a handoff, does the old owner still hold the messages?
+
+## Performance
+
+Measured against the Docker stack on a laptop, using a keep-alive HTTP client:
+
+| | p50 | p95 | p99 | throughput |
+|---|---|---|---|---|
+| enqueue, 1 client | 1.5 ms | 2.8 ms | 5.9 ms | 580/s |
+| enqueue, 32 clients | 6.3 ms | 12.3 ms | 16.8 ms | 4,600/s |
+| dequeue, 1 client | 1.4 ms | 2.3 ms | 5.3 ms | 655/s |
+| dequeue, 32 clients | 5.8 ms | 13.4 ms | 17.4 ms | 4,700/s |
+
+The design target was p95 under 100 ms, so there is plenty of room. The limit
+here is the HTTP and gRPC hop, not the queue: the engine itself does hundreds of
+thousands of operations a second per node (`go test -bench . ./backend/queue/logic/engine`).
+Adding gateways raises the ceiling, since they hold nothing and any one can serve
+any request.
 
 ## Layout
 
@@ -320,12 +430,62 @@ deploy/         compose file and one Dockerfile per service
 docs/           design
 ```
 
-Each service is `controller → logic → entity ← repo`. The engine imports nothing
-outside the standard library; `make lint-layers` checks that and the other layer
-rules.
+Each service is `controller → logic → entity ← repo`. The engine imports only
+`backend/slotting` from the module and nothing else, so it stays a self-contained
+core; `make lint-layers` checks that and the other layer rules.
 
-## What is not built
+## What I would do next
 
-Replication, and with it failing over to a new owner rather than waiting for the
-one that holds the data. Cells, cluster-wide quotas, load-aware placement, and
-automatic promotion of a busy queue to `distributed`.
+**Replication.** The biggest gap, and the honest limit of the system today:
+there is one copy of every message. A machine that dies takes its slots out of
+service until it comes back, and if its disk is gone so are those messages.
+
+Fixing it means putting each slot on three machines instead of one, not
+confirming a write until a second machine has it, and replicating the delivery
+state — which messages are handed out, how many times each has been tried —
+not just the payloads. The write-ahead log already records exactly those events
+in order, so it is the thing you would ship.
+
+It also needs **one leader per slot**, because a read here is a write: taking a
+message marks it in flight and locks its group. If two replicas both served
+reads, the same message would go to two workers. That is the Kafka shape, not
+the Cassandra shape. Promotion would be a single row update — `slot_placement`
+already stores an owner and a generation number, and that generation is already
+the fencing token that stops a demoted owner from carrying on.
+
+**Smaller things, in the order I would do them:**
+
+- **Extend a lease while working.** A worker that needs longer than the
+  visibility timeout currently loses its message. SQS has
+  `ChangeMessageVisibility`; it is a small addition and immediately useful.
+- **Batch send and acknowledge.** Polling is already batched, sending and
+  acknowledging are not. Cuts request count roughly tenfold for busy producers.
+- **Deduplication on enqueue.** A retried send creates a second message today.
+  An idempotency key would fix it.
+- **Redrive from the dead-letter queue.** Messages can go to a DLQ but not come
+  back once the bug is fixed.
+- **More slots.** 64 is small. With 20 machines the busiest holds about twice
+  its fair share, and no queue can ever use more than 64 machines. Going to
+  1024 improves balance and removes the ceiling, at the cost of more log files.
+- **Placement that knows about failure domains.** Three replicas are worth
+  little if all three are on the same rack.
+
+**Deliberately not built:** cluster-wide quotas, load-aware placement (placement
+is by hash, not by how busy a machine is), and automatic promotion of a busy
+single-node queue to a distributed one — that last one needs the slot count to
+be the same for both kinds first.
+
+## Known limits
+
+- **One copy of the data**, as above.
+- **A single-node queue waits for its machine.** If the owner is down the queue
+  returns 503 rather than being reassigned, because the messages are only there.
+  Reassigning would serve an empty queue and quietly lose the real one.
+- **Counts on a distributed queue are a point-in-time sum** across machines that
+  answered at slightly different instants, so they can be a little off. A
+  single-node queue's counts are exact.
+- **Priority across machines is approximate.** Within one machine it is exact;
+  a distributed queue asks the machine that looks busiest first. Ordering within
+  a group is strict either way.
+- **Settings changes take up to 30 seconds to reach every gateway**, because
+  each caches queue config for that long.

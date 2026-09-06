@@ -56,6 +56,8 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		if len(w.restarts) > 0 {
 			_ = stack.WaitReady(ctx, *nodes, 60*time.Second)
 		}
+		// The source first: a queue that is somebody's dead-letter queue
+		// cannot be deleted while that somebody still points at it.
 		for org := range w.clients {
 			_ = w.c(org).DeleteQueue(ctx, w.queue)
 		}
@@ -108,12 +110,26 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		})
 	})
 
-	sc.Step(`^I have created a queue with (\d+) retries$`, func(ctx context.Context, n int) error {
-		r := uint32(n)
-		return w.acme().CreateQueue(ctx, client.CreateQueue{
-			Name: w.queue, MaxRetries: &r, VisibilityTimeout: "2s",
+	sc.Step(`^I have created a queue with (\d+) retries and a dead-letter queue$`,
+		func(ctx context.Context, n int) error {
+			w.dlq = w.queue + "-dlq"
+			if err := w.acme().CreateQueue(ctx, client.CreateQueue{Name: w.dlq}); err != nil {
+				return err
+			}
+			r := uint32(n)
+			return w.acme().CreateQueue(ctx, client.CreateQueue{
+				Name: w.queue, MaxRetries: &r, VisibilityTimeout: "2s",
+				DeadLetterQueue: w.dlq,
+			})
 		})
-	})
+
+	sc.Step(`^I have created a queue with (\d+) retries and no dead-letter queue$`,
+		func(ctx context.Context, n int) error {
+			r := uint32(n)
+			return w.acme().CreateQueue(ctx, client.CreateQueue{
+				Name: w.queue, MaxRetries: &r, VisibilityTimeout: "2s",
+			})
+		})
 
 	sc.Step(`^I have created a queue named "([^"]*)"$`, func(ctx context.Context, suffix string) error {
 		w.dlq = w.queue + "-" + suffix
@@ -504,6 +520,26 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		})
 	})
 
+	sc.Step(`^the dead-letter queue holds (\d+) messages?$`, func(ctx context.Context, n int) error {
+		return eventually(45*time.Second, func() error {
+			s, err := w.acme().Stats(ctx, w.dlq)
+			if err != nil {
+				return err
+			}
+			if s.Messages != int64(n) {
+				return fmt.Errorf("dead-letter queue holds %d, want %d", s.Messages, n)
+			}
+			return nil
+		})
+	})
+
+	sc.Step(`^the dead-letter queue cannot be deleted$`, func(ctx context.Context) error {
+		if err := w.acme().DeleteQueue(ctx, w.dlq); err == nil {
+			return fmt.Errorf("deleting a queue that failures are routed to was allowed")
+		}
+		return nil
+	})
+
 	sc.Step(`^the queue reports (\d+) dead-lettered messages?$`, func(ctx context.Context, n int) error {
 		return eventually(20*time.Second, func() error {
 			s, err := w.acme().Stats(ctx, w.queue)
@@ -667,6 +703,12 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 			return nil
 		})
 		if err != nil {
+			// Say whether the rest are missing or merely not being served yet:
+			// "lost" and "still settling" look identical from the drain alone.
+			if st, e := w.acme().Stats(ctx, w.queue); e == nil {
+				return fmt.Errorf("%w (queue still reports ready=%d inflight=%d unavailableSlots=%d)",
+					err, st.Messages, st.InFlight, st.UnavailableSlots)
+			}
 			return err
 		}
 		if len(seen) != want {

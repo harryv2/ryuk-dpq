@@ -54,7 +54,7 @@ func TestCreateQueueDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := req.Settings
+	s := req.ParseQueueSettings
 	if s.VisibilityTimeout != 30*time.Second || s.MaxRetries != 3 || s.StarvationReserve != 0.2 {
 		t.Fatalf("defaults wrong: %+v", s)
 	}
@@ -69,9 +69,9 @@ func TestCreateQueueDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req.Settings.PlacementWidth != constants.DefaultPlacementWidth {
+	if req.ParseQueueSettings.PlacementWidth != constants.DefaultPlacementWidth {
 		t.Fatalf("width defaulted to %d, want %d",
-			req.Settings.PlacementWidth, constants.DefaultPlacementWidth)
+			req.ParseQueueSettings.PlacementWidth, constants.DefaultPlacementWidth)
 	}
 }
 

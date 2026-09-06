@@ -22,7 +22,7 @@ func (l *GatewayLogic) UpdateQueue(ctx context.Context, req entity.UpdateQueueRe
 		return entity.QueueSummary{}, enterr.Invalid("queue is being deleted")
 	}
 
-	settings := req.Settings
+	settings := req.ParseQueueSettings
 	// Not tunable, and silently dropping a caller's value would be worse than
 	// refusing it.
 	settings.PlacementWidth = cfg.Settings.PlacementWidth

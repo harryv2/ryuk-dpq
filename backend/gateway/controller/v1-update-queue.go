@@ -41,6 +41,6 @@ func parseAndValidateUpdateQueueRequest(r *http.Request, org string) (entity.Upd
 			return req, enterr.Invalid("deadLetterQueue must not be the queue itself")
 		}
 	}
-	req.Settings, err = settingsFrom(req.CreateQueueRequest)
+	req.ParseQueueSettings, err = settingsFrom(req.CreateQueueRequest)
 	return req, err
 }

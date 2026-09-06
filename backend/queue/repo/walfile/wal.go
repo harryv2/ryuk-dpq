@@ -41,6 +41,10 @@ type WAL struct {
 	mu    sync.Mutex
 	slots map[uint16]*slotFile
 
+	dlOnce sync.Once
+	dl     *deadLetterLog
+	dlErr  error
+
 	incarnation uint64
 	stop        chan struct{}
 	stopped     sync.WaitGroup
@@ -80,6 +84,15 @@ func (w *WAL) Close() error {
 	w.closeOnce.Do(func() {
 		close(w.stop)
 		w.stopped.Wait()
+
+		if w.dl != nil {
+			w.dl.mu.Lock()
+			_ = w.dl.f.Sync()
+			if err := w.dl.f.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+			w.dl.mu.Unlock()
+		}
 
 		w.mu.Lock()
 		defer w.mu.Unlock()

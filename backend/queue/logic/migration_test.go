@@ -15,6 +15,8 @@ type fakeWAL struct {
 	engine.NoopJournal
 	enqueued  int
 	compacted []uint16
+	dead      []entity.PendingDeadLetter
+	drained   []string
 }
 
 func (w *fakeWAL) AppendEnqueue(_ uint16, _ *engine.Message) error { w.enqueued++; return nil }
@@ -24,7 +26,21 @@ func (w *fakeWAL) Compact(slot uint16, _ []*engine.Message) error {
 	return nil
 }
 func (w *fakeWAL) Drop(uint16) error { return nil }
-func (w *fakeWAL) Close() error      { return nil }
+
+func (w *fakeWAL) AppendDeadLetter(slot uint16, m *engine.Message) error {
+	w.dead = append(w.dead, entity.PendingDeadLetter{Slot: slot, Msg: m})
+	return nil
+}
+func (w *fakeWAL) AppendDeadLetterDrained(id string) error {
+	w.drained = append(w.drained, id)
+	return nil
+}
+func (w *fakeWAL) ReplayDeadLetters() ([]entity.PendingDeadLetter, error) { return w.dead, nil }
+func (w *fakeWAL) CompactDeadLetters(p []entity.PendingDeadLetter) error {
+	w.dead = p
+	return nil
+}
+func (w *fakeWAL) Close() error { return nil }
 
 type fakeWALs struct{ opened map[engine.QueueKey]*fakeWAL }
 
@@ -196,5 +212,73 @@ func TestHeldSlotsReportsWhatIsFrozen(t *testing.T) {
 	}
 	if len(q.Frozen) != 1 || q.Frozen[0] != 9 {
 		t.Fatalf("frozen %v, want [9]", q.Frozen)
+	}
+}
+
+// The difference between the two handoffs, side by side. Freeze empties the old
+// owner immediately, so between that call and the new owner confirming, the
+// only copy is a local variable inside a stateless gateway. PrepareMove leaves
+// the messages where they are until the move commits.
+func TestPrepareLeavesTheOldOwnerHoldingTheMessages(t *testing.T) {
+	spec := testSpec()
+	spec.Distributed = false
+
+	all := make([]uint16, 16)
+	for i := range all {
+		all[i] = uint16(i)
+	}
+
+	prepared, _ := newTestNode(t)
+	frozen, _ := newTestNode(t)
+	for _, n := range []*QueueLogic{prepared, frozen} {
+		fill(t, n, spec, 2, 10)
+		fill(t, n, spec, 9, 10)
+	}
+
+	if _, err := prepared.PrepareMove(spec, all); err != nil {
+		t.Fatal(err)
+	}
+	if got := ready(t, prepared, spec); got != 20 {
+		t.Fatalf("prepare left %d of 20 messages on the old owner; a gateway dying "+
+			"here would take the rest with it", got)
+	}
+
+	if _, err := frozen.Freeze(spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := ready(t, frozen, spec); got != 0 {
+		t.Fatalf("freeze is supposed to drain, but left %d", got)
+	}
+}
+
+// And once the move commits, the old owner does let go.
+func TestDiscardAfterAWholeQueueMoveReleasesEverything(t *testing.T) {
+	spec := testSpec()
+	spec.Distributed = false
+	all := make([]uint16, 16)
+	for i := range all {
+		all[i] = uint16(i)
+	}
+
+	from, _ := newTestNode(t)
+	to, _ := newTestNode(t)
+	fill(t, from, spec, 2, 10)
+	fill(t, from, spec, 9, 10)
+
+	held, err := from.PrepareMove(spec, all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := to.Absorb(entity.TransferRequest{MoveID: "m1", Spec: spec, BySlot: held}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ready(t, to, spec); got != 20 {
+		t.Fatalf("new owner has %d of 20", got)
+	}
+	if err := from.DiscardMove(spec, all); err != nil {
+		t.Fatal(err)
+	}
+	if got := ready(t, from, spec); got != 0 {
+		t.Fatalf("old owner still holds %d after the move committed", got)
 	}
 }

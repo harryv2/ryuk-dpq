@@ -45,6 +45,7 @@ func main() {
 	go app.RunCollector(ctx)
 	go app.RunRebalancer(ctx)
 	go app.RunReconciler(ctx)
+	go app.RunDeadLetterRouter(ctx)
 	go app.RunSubscriber(ctx, gatewayID())
 
 	srv := &http.Server{

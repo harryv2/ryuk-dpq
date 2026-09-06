@@ -53,6 +53,34 @@ func (mr *MockWALRepoMockRecorder) AppendAttempt(slot, id, attempts, epoch any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendAttempt", reflect.TypeOf((*MockWALRepo)(nil).AppendAttempt), slot, id, attempts, epoch)
 }
 
+// AppendDeadLetter mocks base method.
+func (m_2 *MockWALRepo) AppendDeadLetter(slot uint16, m *engine.Message) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "AppendDeadLetter", slot, m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendDeadLetter indicates an expected call of AppendDeadLetter.
+func (mr *MockWALRepoMockRecorder) AppendDeadLetter(slot, m any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendDeadLetter", reflect.TypeOf((*MockWALRepo)(nil).AppendDeadLetter), slot, m)
+}
+
+// AppendDeadLetterDrained mocks base method.
+func (m *MockWALRepo) AppendDeadLetterDrained(id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendDeadLetterDrained", id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendDeadLetterDrained indicates an expected call of AppendDeadLetterDrained.
+func (mr *MockWALRepoMockRecorder) AppendDeadLetterDrained(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendDeadLetterDrained", reflect.TypeOf((*MockWALRepo)(nil).AppendDeadLetterDrained), id)
+}
+
 // AppendEnqueue mocks base method.
 func (m_2 *MockWALRepo) AppendEnqueue(slot uint16, m *engine.Message) error {
 	m_2.ctrl.T.Helper()
@@ -107,6 +135,20 @@ func (mr *MockWALRepoMockRecorder) Compact(slot, msgs any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Compact", reflect.TypeOf((*MockWALRepo)(nil).Compact), slot, msgs)
 }
 
+// CompactDeadLetters mocks base method.
+func (m *MockWALRepo) CompactDeadLetters(pending []entity.PendingDeadLetter) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompactDeadLetters", pending)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompactDeadLetters indicates an expected call of CompactDeadLetters.
+func (mr *MockWALRepoMockRecorder) CompactDeadLetters(pending any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompactDeadLetters", reflect.TypeOf((*MockWALRepo)(nil).CompactDeadLetters), pending)
+}
+
 // Drop mocks base method.
 func (m *MockWALRepo) Drop(slot uint16) error {
 	m.ctrl.T.Helper()
@@ -148,6 +190,21 @@ func (m *MockWALRepo) Replay() (map[uint16][]*engine.Message, error) {
 func (mr *MockWALRepoMockRecorder) Replay() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replay", reflect.TypeOf((*MockWALRepo)(nil).Replay))
+}
+
+// ReplayDeadLetters mocks base method.
+func (m *MockWALRepo) ReplayDeadLetters() ([]entity.PendingDeadLetter, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplayDeadLetters")
+	ret0, _ := ret[0].([]entity.PendingDeadLetter)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplayDeadLetters indicates an expected call of ReplayDeadLetters.
+func (mr *MockWALRepoMockRecorder) ReplayDeadLetters() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplayDeadLetters", reflect.TypeOf((*MockWALRepo)(nil).ReplayDeadLetters))
 }
 
 // MockWALFactory is a mock of WALFactory interface.

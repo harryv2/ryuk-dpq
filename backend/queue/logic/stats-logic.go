@@ -47,25 +47,3 @@ func toStats(k engine.QueueKey, s engine.Stats) entity.QueueStats {
 		Escapes:      s.Escapes,
 	}
 }
-
-func (l *QueueLogic) offerDeadLetter(key engine.QueueKey, m *engine.Message) {
-	select {
-	case l.deadLetters <- deadLetter{Key: key, Msg: m}:
-	default:
-		l.log.Warn("dead-letter buffer full, dropping", "org", key.Org, "queue", key.Name, "id", m.ID)
-	}
-}
-
-// DeadLetters drains what the sweeper has moved out of queues so the caller can
-// route it to a dead-letter queue.
-func (l *QueueLogic) DeadLetters() []deadLetter {
-	var out []deadLetter
-	for {
-		select {
-		case d := <-l.deadLetters:
-			out = append(out, d)
-		default:
-			return out
-		}
-	}
-}

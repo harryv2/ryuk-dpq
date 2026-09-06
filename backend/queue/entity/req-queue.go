@@ -18,6 +18,7 @@ type QueueSpec struct {
 	StarvationReserve   float64       `json:"starvationReserve"`
 	MaxDepth            int64         `json:"maxDepth"`
 	Distributed         bool          `json:"distributed"`
+	HasDeadLetter       bool          `json:"hasDeadLetter"`
 	Generation          uint64        `json:"generation"`
 }
 
@@ -35,6 +36,7 @@ func (s QueueSpec) EngineConfig() engine.Config {
 		StarvationReserve:   s.StarvationReserve,
 		MaxDepth:            s.MaxDepth,
 		Distributed:         s.Distributed,
+		HasDeadLetter:       s.HasDeadLetter,
 	}
 }
 
@@ -167,4 +169,23 @@ type HeldSlots struct {
 type HeldResponse struct {
 	NodeID string      `json:"nodeId"`
 	Queues []HeldSlots `json:"queues"`
+}
+
+// PendingDeadLetter is a message the queue gave up on, waiting to be moved.
+type PendingDeadLetter struct {
+	Slot uint16
+	Msg  *engine.Message
+}
+
+// DeadLetterItem names the queue a dead letter came from, because the gateway
+// is the one that knows where it should go.
+type DeadLetterItem struct {
+	Org  string
+	Name string
+	Slot uint16
+	Msg  *engine.Message
+}
+
+type DeadLetterResponse struct {
+	DeadLetters []DeadLetterItem
 }

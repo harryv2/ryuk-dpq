@@ -51,7 +51,7 @@ func (l *QueueLogic) Nack(req entity.NackRequest) error {
 		return enterr.Internal("nack", err)
 	}
 	if dead != nil {
-		l.offerDeadLetter(req.Spec.Key(), dead)
+		l.offerDeadLetter(req.Spec.Key(), r.Slot, dead)
 	}
 	return nil
 }

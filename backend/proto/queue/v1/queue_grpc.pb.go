@@ -19,21 +19,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QueueService_Enqueue_FullMethodName     = "/ryuk.queue.v1.QueueService/Enqueue"
-	QueueService_Dequeue_FullMethodName     = "/ryuk.queue.v1.QueueService/Dequeue"
-	QueueService_Ack_FullMethodName         = "/ryuk.queue.v1.QueueService/Ack"
-	QueueService_Nack_FullMethodName        = "/ryuk.queue.v1.QueueService/Nack"
-	QueueService_Stats_FullMethodName       = "/ryuk.queue.v1.QueueService/Stats"
-	QueueService_StatsAll_FullMethodName    = "/ryuk.queue.v1.QueueService/StatsAll"
-	QueueService_Drop_FullMethodName        = "/ryuk.queue.v1.QueueService/Drop"
-	QueueService_PrepareMove_FullMethodName = "/ryuk.queue.v1.QueueService/PrepareMove"
-	QueueService_Absorb_FullMethodName      = "/ryuk.queue.v1.QueueService/Absorb"
-	QueueService_DiscardMove_FullMethodName = "/ryuk.queue.v1.QueueService/DiscardMove"
-	QueueService_AbortMove_FullMethodName   = "/ryuk.queue.v1.QueueService/AbortMove"
-	QueueService_Freeze_FullMethodName      = "/ryuk.queue.v1.QueueService/Freeze"
-	QueueService_Held_FullMethodName        = "/ryuk.queue.v1.QueueService/Held"
-	QueueService_Subscribe_FullMethodName   = "/ryuk.queue.v1.QueueService/Subscribe"
-	QueueService_Health_FullMethodName      = "/ryuk.queue.v1.QueueService/Health"
+	QueueService_Enqueue_FullMethodName        = "/ryuk.queue.v1.QueueService/Enqueue"
+	QueueService_Dequeue_FullMethodName        = "/ryuk.queue.v1.QueueService/Dequeue"
+	QueueService_Ack_FullMethodName            = "/ryuk.queue.v1.QueueService/Ack"
+	QueueService_Nack_FullMethodName           = "/ryuk.queue.v1.QueueService/Nack"
+	QueueService_Stats_FullMethodName          = "/ryuk.queue.v1.QueueService/Stats"
+	QueueService_StatsAll_FullMethodName       = "/ryuk.queue.v1.QueueService/StatsAll"
+	QueueService_Drop_FullMethodName           = "/ryuk.queue.v1.QueueService/Drop"
+	QueueService_PrepareMove_FullMethodName    = "/ryuk.queue.v1.QueueService/PrepareMove"
+	QueueService_Absorb_FullMethodName         = "/ryuk.queue.v1.QueueService/Absorb"
+	QueueService_DiscardMove_FullMethodName    = "/ryuk.queue.v1.QueueService/DiscardMove"
+	QueueService_AbortMove_FullMethodName      = "/ryuk.queue.v1.QueueService/AbortMove"
+	QueueService_Freeze_FullMethodName         = "/ryuk.queue.v1.QueueService/Freeze"
+	QueueService_Held_FullMethodName           = "/ryuk.queue.v1.QueueService/Held"
+	QueueService_DeadLetters_FullMethodName    = "/ryuk.queue.v1.QueueService/DeadLetters"
+	QueueService_AckDeadLetters_FullMethodName = "/ryuk.queue.v1.QueueService/AckDeadLetters"
+	QueueService_Subscribe_FullMethodName      = "/ryuk.queue.v1.QueueService/Subscribe"
+	QueueService_Health_FullMethodName         = "/ryuk.queue.v1.QueueService/Health"
 )
 
 // QueueServiceClient is the client API for QueueService service.
@@ -59,6 +61,13 @@ type QueueServiceClient interface {
 	// Held reports what this node has, so the gateway can reconcile it against
 	// placement and repair anything a failed handoff left behind.
 	Held(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*HeldResponse, error)
+	// A node cannot route a dead letter itself: it does not know which node owns
+	// the dead-letter queue, and placement is the gateway's to read. So it holds
+	// them and the gateway drains them. They are only dropped once the gateway
+	// confirms they landed, so a gateway dying in between costs a duplicate in
+	// the dead-letter queue rather than a lost message.
+	DeadLetters(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*DeadLetterResponse, error)
+	AckDeadLetters(ctx context.Context, in *AckDeadLettersRequest, opts ...grpc.CallOption) (*Empty, error)
 	// Subscribe is how a parked consumer is woken. Notification and dequeue are
 	// separate so only one dequeue is ever issued: fanning a waiting dequeue out
 	// to several nodes would lease messages nobody is processing.
@@ -204,6 +213,26 @@ func (c *queueServiceClient) Held(ctx context.Context, in *Empty, opts ...grpc.C
 	return out, nil
 }
 
+func (c *queueServiceClient) DeadLetters(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*DeadLetterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeadLetterResponse)
+	err := c.cc.Invoke(ctx, QueueService_DeadLetters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queueServiceClient) AckDeadLetters(ctx context.Context, in *AckDeadLettersRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, QueueService_AckDeadLetters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *queueServiceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkAvailable], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &QueueService_ServiceDesc.Streams[0], QueueService_Subscribe_FullMethodName, cOpts...)
@@ -256,6 +285,13 @@ type QueueServiceServer interface {
 	// Held reports what this node has, so the gateway can reconcile it against
 	// placement and repair anything a failed handoff left behind.
 	Held(context.Context, *Empty) (*HeldResponse, error)
+	// A node cannot route a dead letter itself: it does not know which node owns
+	// the dead-letter queue, and placement is the gateway's to read. So it holds
+	// them and the gateway drains them. They are only dropped once the gateway
+	// confirms they landed, so a gateway dying in between costs a duplicate in
+	// the dead-letter queue rather than a lost message.
+	DeadLetters(context.Context, *Empty) (*DeadLetterResponse, error)
+	AckDeadLetters(context.Context, *AckDeadLettersRequest) (*Empty, error)
 	// Subscribe is how a parked consumer is woken. Notification and dequeue are
 	// separate so only one dequeue is ever issued: fanning a waiting dequeue out
 	// to several nodes would lease messages nobody is processing.
@@ -309,6 +345,12 @@ func (UnimplementedQueueServiceServer) Freeze(context.Context, *FreezeRequest) (
 }
 func (UnimplementedQueueServiceServer) Held(context.Context, *Empty) (*HeldResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Held not implemented")
+}
+func (UnimplementedQueueServiceServer) DeadLetters(context.Context, *Empty) (*DeadLetterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeadLetters not implemented")
+}
+func (UnimplementedQueueServiceServer) AckDeadLetters(context.Context, *AckDeadLettersRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method AckDeadLetters not implemented")
 }
 func (UnimplementedQueueServiceServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[WorkAvailable]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -571,6 +613,42 @@ func _QueueService_Held_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QueueService_DeadLetters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).DeadLetters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_DeadLetters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).DeadLetters(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueueService_AckDeadLetters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AckDeadLettersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueueServiceServer).AckDeadLetters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueueService_AckDeadLetters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueueServiceServer).AckDeadLetters(ctx, req.(*AckDeadLettersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _QueueService_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -658,6 +736,14 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Held",
 			Handler:    _QueueService_Held_Handler,
+		},
+		{
+			MethodName: "DeadLetters",
+			Handler:    _QueueService_DeadLetters_Handler,
+		},
+		{
+			MethodName: "AckDeadLetters",
+			Handler:    _QueueService_AckDeadLetters_Handler,
 		},
 		{
 			MethodName: "Health",

@@ -37,6 +37,7 @@ type GatewayLogicInterface interface {
 
 	Collect(context.Context)
 	Reconcile(context.Context)
+	RouteDeadLetters(context.Context)
 }
 
 type GatewayLogic struct {

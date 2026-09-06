@@ -155,3 +155,31 @@ func TestCandidatesRankTheSameWayAsTheOwner(t *testing.T) {
 		t.Fatal("the first candidate must be the machine OwnerFor picks")
 	}
 }
+
+func placeHRW(ms []Member, slots int) map[int]string {
+	out := map[int]string{}
+	for s := 0; s < slots; s++ {
+		m, _ := OwnerFor(OwnerKey("org1", "orders", s, true), ms)
+		out[s] = m.ID
+	}
+	return out
+}
+
+// The property that makes a rebalance cheap: when a machine joins, a slot
+// either stays where it is or moves to the new machine. Never between two
+// machines that were both already there.
+func TestJoinOnlyMovesSlotsToTheNewMachine(t *testing.T) {
+	const slots = 64
+	for _, n := range []int{3, 5, 8, 12, 20} {
+		before := placeHRW(members(n), slots)
+		after := placeHRW(members(n+1), slots)
+		newest := members(n + 1)[n].ID
+
+		for s := 0; s < slots; s++ {
+			if before[s] != after[s] && after[s] != newest {
+				t.Fatalf("%d→%d nodes: slot %d moved %s→%s, neither of which is the new machine",
+					n, n+1, s, before[s], after[s])
+			}
+		}
+	}
+}

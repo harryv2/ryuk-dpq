@@ -17,6 +17,24 @@ message QueueSpec {
   int64 max_depth = 8;
   bool distributed = 9;
   uint64 generation = 10;
+  // Whether failures have anywhere to go. Without a dead-letter queue a message
+  // that runs out of retries keeps being redelivered rather than dropped.
+  bool has_dead_letter = 11;
+}
+
+message DeadLetter {
+  string org = 1;
+  string name = 2;
+  uint32 slot = 3;
+  WireMessage message = 4;
+}
+
+message DeadLetterResponse {
+  repeated DeadLetter dead_letters = 1;
+}
+
+message AckDeadLettersRequest {
+  repeated string message_ids = 1;
 }
 
 message EnqueueRequest {
@@ -187,6 +205,14 @@ service QueueService {
   // Held reports what this node has, so the gateway can reconcile it against
   // placement and repair anything a failed handoff left behind.
   rpc Held(Empty) returns (HeldResponse);
+
+  // A node cannot route a dead letter itself: it does not know which node owns
+  // the dead-letter queue, and placement is the gateway's to read. So it holds
+  // them and the gateway drains them. They are only dropped once the gateway
+  // confirms they landed, so a gateway dying in between costs a duplicate in
+  // the dead-letter queue rather than a lost message.
+  rpc DeadLetters(Empty) returns (DeadLetterResponse);
+  rpc AckDeadLetters(AckDeadLettersRequest) returns (Empty);
 
   // Subscribe is how a parked consumer is woken. Notification and dequeue are
   // separate so only one dequeue is ever issued: fanning a waiting dequeue out

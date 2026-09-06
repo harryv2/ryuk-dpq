@@ -30,15 +30,26 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 	cfgs = l.withPlacement(ctx, cfgs)
 
 	owners := map[string]map[uint16]string{} // queue key -> slot -> owner
-	distributed := map[string]bool{}
 	specs := map[string]entity.QueueSpec{}
 	for _, c := range cfgs {
 		k := key(c.Org, c.Name)
-		distributed[k] = c.Distributed
 		specs[k] = c.Spec()
 		if c.Distributed {
 			owners[k] = c.SlotOwners
+			continue
 		}
+		// A single-node queue has no placement rows: it is placed whole, so
+		// every slot belongs to the one owner named on its row. Without this
+		// its moves would have no repair, and an interrupted one would leave
+		// the queue frozen and serving nothing.
+		if c.OwnerNode == "" {
+			continue
+		}
+		whole := make(map[uint16]string, slotCountFor(false))
+		for s := 0; s < slotCountFor(false); s++ {
+			whole[uint16(s)] = c.OwnerNode
+		}
+		owners[k] = whole
 	}
 
 	repaired := 0
@@ -49,9 +60,6 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 		}
 		for _, q := range held.Queues {
 			k := key(q.Org, q.Name)
-			if !distributed[k] {
-				continue // a whole-queue placement, handled by the rebalancer
-			}
 			place, known := owners[k]
 			if !known {
 				continue // deleted, or not read this pass
