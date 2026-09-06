@@ -76,9 +76,9 @@ func (l *GatewayLogic) DeleteQueue(ctx context.Context, org, name string) error 
 	if err != nil {
 		return err
 	}
-	// Deleting a queue that failures are routed to would leave those queues
-	// with nowhere to put them, which surfaces much later as messages that
-	// never go away. Refuse, and name what depends on it.
+	// Deleting a queue that failures are routed to would leave those queues with
+	// nowhere to put them, which surfaces much later as messages that never go
+	// away.
 	if users, err := l.deadLetterUsers(ctx, org, name); err != nil {
 		return err
 	} else if len(users) > 0 {

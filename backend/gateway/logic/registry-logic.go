@@ -8,9 +8,7 @@ import (
 )
 
 // GetRegistry reads etcd as it actually is, rather than the member list the
-// gateway builds from it. The two disagreeing is worth being able to see: a
-// gateway that missed a watch event keeps serving a stale view, and nothing
-// else in the UI would show it.
+// gateway builds from it.
 func (l *GatewayLogic) GetRegistry(ctx context.Context) (entity.RegistryResponse, error) {
 	entries, err := l.membershipRepo.Entries(ctx)
 	if err != nil {

@@ -13,23 +13,18 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/slotting"
 )
 
-// moveBackoff is how long to wait before re-reading placement and trying again.
-// The measured freeze during a handoff is ~2ms, so the first pause alone covers
-// the common case and the rest cover a slot large enough to take longer.
+// moveBackoff is how long to wait before re-reading placement and trying
+// again.
 var moveBackoff = []time.Duration{5 * time.Millisecond, 25 * time.Millisecond, 100 * time.Millisecond}
 
-// withOwner resolves the owner and runs the call. If the node says the queue
-// moved, the cached config is dropped and the call is retried against the new
-// owner, so a migration is invisible to callers.
+// withOwner resolves the owner and runs the call.
 func (l *GatewayLogic) withOwner(
 	ctx context.Context,
 	cfg entity.QueueConfig,
 	slot int,
 	call func(addr string, spec entity.QueueSpec) error,
 ) error {
-	// A slot being handed over is held for a couple of milliseconds. Retrying
-	// immediately can land inside the same window, so each attempt waits a
-	// little longer than the last.
+	// A slot being handed over is held for a couple of milliseconds.
 	for attempt := 0; attempt < len(moveBackoff)+1; attempt++ {
 		_, addr, err := l.ownerAddr(ctx, cfg, slot)
 		if err != nil {
@@ -56,8 +51,6 @@ func (l *GatewayLogic) withOwner(
 }
 
 // rankedOwners lists the machines holding this queue, most urgent work first.
-// The ranking comes from the collector's last sweep, so a stale entry costs one
-// wasted call rather than a wrong answer.
 func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 	type owner struct {
 		addr  string
@@ -90,10 +83,7 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 	return out
 }
 
-// slotCountFor is the queue's shape, decided at creation and never changed. It
-// has to agree with engine.SlotCountFor: if the gateway thinks a queue has more
-// slots than the node does, a message lands in a slot the dispatcher never
-// looks at and is never delivered.
+// slotCountFor is the queue's shape, decided at creation and never changed.
 func slotCountFor(distributed bool) int { return slotting.CountFor(distributed) }
 
 // An ungrouped message has no ordering to preserve, so it is scattered instead

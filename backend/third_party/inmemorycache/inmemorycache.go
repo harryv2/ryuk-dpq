@@ -1,6 +1,4 @@
-// Package inmemorycache is a process-local cache over ristretto. Values are
-// stored as JSON bytes so one cache can hold every kind of value the callers
-// need, each key namespaced by its own prefix.
+// Package inmemorycache is a process-local cache over ristretto.
 package inmemorycache
 
 import (
@@ -17,9 +15,7 @@ type InMemoryCache struct {
 	logger *slog.Logger
 }
 
-// NewInMemoryCache builds the cache. Ristretto admits keys by frequency rather
-// than keeping everything, so a Set is allowed to be dropped -- a caller must
-// treat a miss as normal and go to the source, which read-through already does.
+// NewInMemoryCache builds the cache.
 func NewInMemoryCache(logger *slog.Logger) *InMemoryCache {
 	const (
 		numCounters = 1e7     // keys to track the frequency of

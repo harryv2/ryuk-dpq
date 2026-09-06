@@ -41,8 +41,7 @@ type slot struct {
 	headSeq atomic.Uint64
 
 	// A slot being handed to another node stops changing: no delivery, no
-	// enqueue, no timers. Its messages have been snapshotted, and anything that
-	// mutated them afterwards would be left behind when the slot is dropped.
+	// enqueue, no timers.
 	frozen atomic.Bool
 }
 
@@ -189,11 +188,8 @@ func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Rec
 	s.st.inflight++
 	s.refreshHint()
 
-	// A copy, not the live message. The slot keeps mutating the original --
-	// Attempts on the next delivery, DeliverAfter on a delayed retry -- and the
-	// caller reads what it was handed after this lock is gone. Sharing the
-	// pointer is a data race, and it lets a stale attempt count reach the log.
-	// The payload slice is shared, which is safe because nothing writes to it.
+	// A copy, not the live message: the slot keeps mutating the original after
+	// this lock is gone, and sharing the pointer is a data race.
 	out := *m
 	return &out, Receipt{Slot: s.id, MessageID: m.ID, Epoch: l.epoch}, true
 }

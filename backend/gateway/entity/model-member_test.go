@@ -166,8 +166,7 @@ func placeHRW(ms []Member, slots int) map[int]string {
 }
 
 // The property that makes a rebalance cheap: when a machine joins, a slot
-// either stays where it is or moves to the new machine. Never between two
-// machines that were both already there.
+// either stays where it is or moves to the new machine.
 func TestJoinOnlyMovesSlotsToTheNewMachine(t *testing.T) {
 	const slots = 64
 	for _, n := range []int{3, 5, 8, 12, 20} {

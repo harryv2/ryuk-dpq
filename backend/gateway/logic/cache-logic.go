@@ -37,8 +37,7 @@ type envelope[T any] struct {
 }
 
 // fetchViaCache is the whole read-through in one place: look, fall back to the
-// source, store the result, remember a miss briefly. A function rather than a
-// method because a method cannot take its own type parameter.
+// source, store the result, remember a miss briefly.
 func fetchViaCache[T any](l *GatewayLogic, cacheKey string, ttl time.Duration, source func() (T, error)) (T, error) {
 	var env envelope[T]
 	if found, err := l.cache.GetAndParse(cacheKey, &env); found {

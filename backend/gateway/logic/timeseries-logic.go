@@ -7,9 +7,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
 )
 
-// windows the metrics page can ask for, and how finely to sample each. A longer
-// window gets a coarser step so the number of points stays roughly constant
-// whatever the range.
+// windows the metrics page can ask for, and how finely to sample each.
 var windows = map[string]struct {
 	Range time.Duration
 	Step  time.Duration

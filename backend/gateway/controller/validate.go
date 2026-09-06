@@ -9,9 +9,8 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
-// Everything here decides whether a request is well formed, which needs nothing
-// but the request itself. Checks that need stored state -- does this queue
-// exist, is the dead-letter queue real -- belong in the logic layer.
+// Everything here decides whether a request is well formed, which needs
+// nothing but the request itself.
 
 func optDuration(field, s string) (time.Duration, error) {
 	if s == "" {
@@ -54,9 +53,7 @@ func parsePriority(v any) (uint8, error) {
 	return 0, enterr.Invalid("priority must be a number or HIGH, MEDIUM, LOW")
 }
 
-// decodePayload reads the body according to what the caller said it is. It does
-// not sniff: a short alphanumeric message like "m000" is valid base64, so
-// guessing silently turns a message into three bytes of noise.
+// decodePayload reads the body according to what the caller said it is.
 func decodePayload(s, encoding string) ([]byte, error) {
 	if s == "" {
 		return nil, enterr.Invalid("payload is required")

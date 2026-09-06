@@ -70,9 +70,7 @@ type liveQueue struct {
 	q   *engine.Queue
 	wal entity.WALRepo
 
-	// Messages this queue has given up on, waiting for the gateway to move
-	// them. Held until it confirms they landed, so a gateway that dies in
-	// between costs a duplicate rather than the message.
+	// Messages this queue has given up on, waiting for the gateway to move them.
 	dlMu sync.Mutex
 	dl   map[string]entity.PendingDeadLetter
 }

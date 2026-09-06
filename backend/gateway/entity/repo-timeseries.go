@@ -17,9 +17,7 @@ type SeriesPoint struct {
 	Value float64   `json:"value"`
 }
 
-// TimeseriesQuery asks for one metric over a window. The org is filled in from
-// the credential, never from the request, so a caller cannot read another
-// tenant's series by naming it.
+// TimeseriesQuery asks for one metric over a window.
 type TimeseriesQuery struct {
 	Org   string
 	Queue string

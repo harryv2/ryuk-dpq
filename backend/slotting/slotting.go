@@ -14,11 +14,7 @@ func CountFor(distributed bool) int {
 	return PerQueue
 }
 
-// SlotFor hashes org, queue and group together. The separators stop org "a"
-// queue "bc" colliding with org "ab" queue "c".
-//
-// An empty group is not handled here: what an ungrouped message should do is a
-// policy the caller owns, and the two callers want different things.
+// SlotFor hashes org, queue and group together.
 func SlotFor(org, name, group string, slots int) uint16 {
 	h := fnv.New64a()
 	h.Write([]byte(org))

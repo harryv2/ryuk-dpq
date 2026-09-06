@@ -5,19 +5,14 @@ import (
 	"sort"
 )
 
-// Member is a live node. The id is stable across restarts because it lives with
-// the node's data; the address is not, because a container gets a new hostname
-// every time it is recreated.
+// Member is a live node.
 type Member struct {
 	ID   string `json:"id"`
 	Addr string `json:"addr"`
 }
 
 // CandidatesFor is the set of machines a queue may use: the top `width` of the
-// same ranking OwnerFor picks its winner from. Bounding it is shuffle sharding
-// -- two queues of width 4 on twenty nodes share 0.8 machines on average, so a
-// hot queue is felt by a few neighbours rather than by everyone. A width past
-// the cluster size is the cluster size.
+// same ranking OwnerFor picks its winner from.
 func CandidatesFor(key string, members []Member, width int) []Member {
 	if width <= 0 || width >= len(members) {
 		return members
@@ -59,9 +54,7 @@ func hash64(s string) uint64 {
 	return h.Sum64()
 }
 
-// mix runs the combined hashes through splitmix64. Hashing key+id in one FNV
-// pass is not enough: ids differing only in their last byte score in a
-// correlated way, and one member wins far more keys than its share.
+// mix runs the combined hashes through splitmix64.
 func mix(a, b uint64) uint64 {
 	x := a ^ (b * 0x9E3779B97F4A7C15)
 	x ^= x >> 30

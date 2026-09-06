@@ -12,9 +12,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/queue/repo/membershipetcd"
 )
 
-// InitialiseQueueLogic builds the node's god struct. Identity and the log
-// factory come from the data directory, so a node needs no configuration beyond
-// where its data lives and how to reach etcd.
+// InitialiseQueueLogic builds the node's god struct.
 func InitialiseQueueLogic(cfg config.Node) (*QueueLogic, error) {
 	wire.Build(
 		ProvideLogger,

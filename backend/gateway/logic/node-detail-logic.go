@@ -8,9 +8,7 @@ import (
 )
 
 // GetNodeDetails answers for one machine: what it holds, and how much of each
-// queue is its share. The counts come from the node itself rather than the
-// collector's cache, because the cache holds a queue's total across machines
-// and the whole point here is the split.
+// queue is its share.
 func (l *GatewayLogic) GetNodeDetails(ctx context.Context, org, nodeID string) (entity.NodeDetailResponse, error) {
 	m, ok := l.membershipRepo.Lookup(nodeID)
 	if !ok {

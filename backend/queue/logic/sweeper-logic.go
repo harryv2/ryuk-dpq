@@ -33,8 +33,7 @@ func (l *QueueLogic) RunSweeper(stop <-chan struct{}) {
 	defer t.Stop()
 
 	// Acknowledged messages stay in the log until it is rewritten, so without
-	// this the files grow without bound. Far slower than the sweep: it rewrites
-	// whole files, and only what is still live needs to survive.
+	// this the files grow without bound.
 	compact := time.NewTicker(compactEvery)
 	defer compact.Stop()
 

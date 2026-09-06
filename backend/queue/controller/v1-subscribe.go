@@ -4,9 +4,7 @@ import (
 	pb "github.com/harryv2/ryuk-dpq/backend/proto/queue/v1"
 )
 
-// Subscribe pushes a notification when a queue on this node gains work. The
-// gateway then issues one dequeue, so nothing is leased speculatively. When the
-// gateway goes away the stream breaks and the subscription is dropped.
+// Subscribe pushes a notification when a queue on this node gains work.
 func (s *Server) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_SubscribeServer) error {
 	id, ch := s.app.Subscribe()
 	defer s.app.Unsubscribe(id)

@@ -68,9 +68,8 @@ func LoadNode() Node {
 		LogLevel:    str("RYUK_LOG_LEVEL", "info"),
 		LogFormat:   str("RYUK_LOG_FORMAT", "text"),
 	}
-	// Replicas share one mounted directory, so each takes a subdirectory named
-	// by its container hostname. Without it they would fight over one node-id
-	// and one set of logs.
+	// Replicas share one mounted directory, so each takes a subdirectory named by
+	// its container hostname.
 	if str("RYUK_DATA_PER_HOST", "") != "" {
 		if h, err := os.Hostname(); err == nil && h != "" {
 			n.DataDir = filepath.Join(n.DataDir, h)

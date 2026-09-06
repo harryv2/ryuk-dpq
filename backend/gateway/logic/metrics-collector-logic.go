@@ -135,8 +135,7 @@ func (l *GatewayLogic) Stats(ctx context.Context, org, name string) (entity.Queu
 	}
 
 	// A distributed queue is spread, so ask every machine holding a slot and add
-	// the answers up. They describe slightly different instants, which is why
-	// the response says exact=false.
+	// the answers up.
 	var total entity.NodeStats
 	total.Org, total.Name = org, name
 	missing := 0
@@ -249,9 +248,7 @@ func (l *GatewayLogic) GetClusterDetails(ctx context.Context) (entity.ClusterRes
 		out.Nodes = append(out.Nodes, node)
 	}
 
-	// Slots whose owner is no longer registered. Nothing reassigns them, because
-	// the data is only there, so a queue left entirely on lost machines would
-	// otherwise disappear from this view instead of showing as broken.
+	// Slots whose owner is no longer registered.
 	lost := map[string]int{}
 	for p, n := range slots {
 		if !live[p.node] {

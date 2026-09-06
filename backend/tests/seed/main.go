@@ -1,14 +1,5 @@
 // Command seed fills a running gateway with queues and messages, so the UI and
 // the metrics have something real to show.
-//
-//	go run ./backend/tests/seed
-//	go run ./backend/tests/seed -queues 40 -messages 500 -reset
-//
-// It builds a spread rather than a uniform pile: single-node and distributed
-// queues, several placement widths, priorities across the whole 0-100 scale,
-// grouped and ungrouped messages, some delayed, some in flight, some nacked
-// until they dead-letter. A queue that looks the same as every other queue
-// tells you nothing.
 package main
 
 import (
@@ -77,9 +68,7 @@ type queueSpec struct {
 	dlq         string
 }
 
-// plan decides what each queue looks like. Every third one is distributed, and
-// the widths vary so the cluster page shows queues occupying different numbers
-// of machines.
+// plan decides what each queue looks like.
 func plan(n int, rnd *rand.Rand) []queueSpec {
 	widths := []int{2, 3, 4, 6}
 	out := make([]queueSpec, 0, n)

@@ -1,6 +1,4 @@
-// Package walfile is the on-disk write-ahead log. One file per slot: a slot's
-// log is its whole history, which is what makes handing a slot to another node
-// a matter of copying bytes.
+// Package walfile is the on-disk write-ahead log.
 package walfile
 
 import (
@@ -194,9 +192,7 @@ func (w *WAL) syncAll() {
 	}
 }
 
-// Replay rebuilds what each slot held. Reading stops at the first bad record:
-// a half-written record at the end of a log is what a crash looks like, and
-// nothing after it can be valid.
+// Replay rebuilds what each slot held.
 func (w *WAL) Replay() (map[uint16][]*engine.Message, error) {
 	entries, err := os.ReadDir(w.opts.Dir)
 	if err != nil {

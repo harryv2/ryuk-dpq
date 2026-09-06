@@ -1,13 +1,4 @@
-// Command harness is the producer and consumer stub. It drives the gateway API
-// with many of each at once and checks the invariants that matter: nothing lost,
-// nothing acknowledged twice, nothing delivered to two workers, and group order
-// preserved.
-//
-//	go run ./backend/tests/harness -producers 8 -consumers 8 -messages 500
-//	go run ./backend/tests/harness -queue events -distributed
-//
-// Set -consumers 0 to produce only, or -producers 0 to consume an existing
-// queue, which is how the two roles are run separately.
+// Command harness is the producer and consumer stub.
 package main
 
 import (
@@ -134,9 +125,7 @@ func main() {
 		go func(p int) {
 			defer wg.Done()
 			for i := 0; i < *messages; i++ {
-				// Each producer owns its own groups. With several producers
-				// writing to one group there is no defined submission order to
-				// check delivery against.
+				// Each producer owns its own groups.
 				group := fmt.Sprintf("p%d-g%d", p, i%*groups)
 				// the index is carried in the payload so the consumer can check
 				// that a group came out in the order it went in

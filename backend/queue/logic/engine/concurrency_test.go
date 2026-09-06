@@ -238,8 +238,7 @@ func TestConcurrentRedelivery(t *testing.T) {
 }
 
 // TestGroupHoldsOneMessageAtATime is the invariant that makes group ordering
-// mean anything. If two workers can hold messages of the same group at once,
-// the second can finish first and the order the queue promised is gone.
+// mean anything.
 func TestGroupHoldsOneMessageAtATime(t *testing.T) {
 	const (
 		groups    = 12
@@ -392,10 +391,8 @@ func TestGroupOrderSurvivesConcurrentProducers(t *testing.T) {
 	}
 }
 
-// TestStaleAckIsRejected races an acknowledgment against the sweeper that takes
-// the lease back. Exactly one of them wins: the ack succeeds, or it is refused
-// and the message comes back. What must not happen is an ack landing on a
-// message someone else already holds.
+// TestStaleAckIsRejected races an acknowledgment against the sweeper that
+// takes the lease back.
 func TestStaleAckIsRejected(t *testing.T) {
 	const total = 300
 
@@ -575,9 +572,7 @@ func TestDeadLetterExactlyOnce(t *testing.T) {
 	}
 }
 
-// TestFreezeDuringTrafficLosesNothing is the migration path under load. Freeze
-// takes everything out, Absorb puts it back, and producers keep going the whole
-// time. Every message must end up either back in the queue or acknowledged.
+// TestFreezeDuringTrafficLosesNothing is the migration path under load.
 func TestFreezeDuringTrafficLosesNothing(t *testing.T) {
 	const (
 		producers   = 4
@@ -746,8 +741,7 @@ func TestStatsNeverGoNegative(t *testing.T) {
 }
 
 // TestStarvationReserveMovesLowPriorityUnderLoad checks the guard still works
-// when producers keep the high band full. Without it the low-priority messages
-// would sit there until they expired.
+// when producers keep the high band full.
 func TestStarvationReserveMovesLowPriorityUnderLoad(t *testing.T) {
 	q, clk := newTestQueue(t, func(c *Config) {
 		c.VisibilityTimeout = time.Hour

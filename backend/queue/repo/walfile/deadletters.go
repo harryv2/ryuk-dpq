@@ -12,10 +12,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
 )
 
-// Dead letters get their own log rather than a record in the slot's. A slot log
-// holds what the queue still has; these are what it no longer has and has not
-// yet handed over, which is a different lifetime. Keeping them apart also means
-// slot replay and compaction are untouched by any of this.
+// Dead letters get their own log rather than a record in the slot's.
 const deadLetterFile = "dead-letters.log"
 
 type deadLetterPayload struct {
@@ -136,9 +133,7 @@ func (w *WAL) ReplayDeadLetters() ([]entity.PendingDeadLetter, error) {
 	return out, nil
 }
 
-// CompactDeadLetters rewrites the log to hold only what is still waiting. Every
-// drained record is one that will never matter again, and without this the file
-// grows for the life of the queue.
+// CompactDeadLetters rewrites the log to hold only what is still waiting.
 func (w *WAL) CompactDeadLetters(pending []entity.PendingDeadLetter) error {
 	dl, err := w.deadLetters()
 	if err != nil {

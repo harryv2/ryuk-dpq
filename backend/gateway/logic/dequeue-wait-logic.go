@@ -8,9 +8,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
 )
 
-// waiters lets a parked consumer be woken instead of polling. One stream per
-// node carries every queue's notifications, so ten thousand waiting consumers
-// cost ten thousand map entries and no extra connections.
+// waiters lets a parked consumer be woken instead of polling.
 type waiters struct {
 	mu sync.Mutex
 	m  map[string][]chan struct{}

@@ -12,11 +12,6 @@ const drainEvery = 5 * time.Second
 
 // RunDeadLetterRouter moves what nodes have given up on into the queues those
 // messages were meant to fail into.
-//
-// The node cannot do this itself: it does not know which node owns the
-// dead-letter queue, and placement lives in Postgres, which nodes deliberately
-// never read. So the gateway, which knows both, pulls them and re-enqueues them
-// through the ordinary path.
 func (l *GatewayLogic) RunDeadLetterRouter(ctx context.Context) {
 	t := time.NewTicker(drainEvery)
 	defer t.Stop()

@@ -1,6 +1,4 @@
-// Package cluster starts and stops the real system with Docker Compose. The
-// integration tests talk to the same images that get deployed, over the same
-// ports, so nothing here is a stand-in for the real thing.
+// Package cluster starts and stops the real system with Docker Compose.
 package cluster
 
 import (
@@ -103,8 +101,6 @@ func (c *Cluster) composeOut(ctx context.Context, args ...string) (string, error
 }
 
 // Up builds the images and brings the stack up with the requested node count.
-// Building is skipped when RYUK_IT_NO_BUILD is set, which makes a rerun quick
-// while iterating on the tests themselves.
 func (c *Cluster) Up(ctx context.Context, nodes int) error {
 	if os.Getenv("RYUK_IT_NO_BUILD") == "" {
 		if err := c.compose(ctx, "build"); err != nil {
@@ -127,8 +123,7 @@ func (c *Cluster) Scale(ctx context.Context, nodes int) error {
 }
 
 // StopNode stops one node container without removing it, which is what a
-// machine going down looks like. Returns the container name so it can be
-// started again.
+// machine going down looks like.
 func (c *Cluster) StopNode(ctx context.Context, index int) (string, error) {
 	name, err := c.nodeContainer(ctx, index)
 	if err != nil {
@@ -143,8 +138,7 @@ func (c *Cluster) StopNode(ctx context.Context, index int) (string, error) {
 }
 
 // StartContainer brings a stopped container back and waits for its healthcheck
-// to pass. Returning as soon as docker start does would hand the next scenario
-// a node that is registered but not yet accepting connections.
+// to pass.
 func (c *Cluster) StartContainer(ctx context.Context, name string) error {
 	start := exec.CommandContext(ctx, "docker", "start", name)
 	start.Stderr = os.Stderr
@@ -180,8 +174,7 @@ func (c *Cluster) nodeContainer(ctx context.Context, index int) (string, error) 
 }
 
 // WaitReady blocks until the gateway answers and reports at least the expected
-// number of members. Nodes register themselves, so the count is what proves the
-// stack is actually usable rather than merely started.
+// number of members.
 func (c *Cluster) WaitReady(ctx context.Context, nodes int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var last error

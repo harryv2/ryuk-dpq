@@ -343,10 +343,7 @@ func TestOldestAge(t *testing.T) {
 	}
 }
 
-// A migration or a replay moves messages that were already submitted. Counting
-// them as new enqueues on the receiving owner makes the handoff look like a
-// burst of traffic, and any rate derived from the counter shows a spike that
-// never happened.
+// A migration or a replay moves messages that were already submitted.
 func TestAbsorbDoesNotCountAsNewEnqueues(t *testing.T) {
 	from, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
 	for i := 0; i < 6; i++ {
@@ -429,9 +426,7 @@ func TestBandsCoverTheWholeScale(t *testing.T) {
 	}
 }
 
-// A handoff must not remove anything until the new owner has it. FreezeSlots
-// takes copies and holds the slot out of service; if the move never completes,
-// thawing puts it back exactly as it was.
+// A handoff must not remove anything until the new owner has it.
 func TestFreezeSlotsKeepsTheMessages(t *testing.T) {
 	q, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
 	for i := 0; i < 12; i++ {
@@ -610,10 +605,7 @@ func TestLoweringRetriesAppliesToMessagesAlreadyDelivered(t *testing.T) {
 }
 
 // A terminal record has to go in the log of the slot the message is actually
-// in. Deriving it from the group key instead gives the wrong slot for an
-// ungrouped message -- the gateway chose that slot from something other than
-// the id -- so the message's own log keeps an enqueue with no terminal and a
-// restart resurrects a message that was already dead-lettered.
+// in.
 func TestDeadLetterTerminalGoesToTheSlotTheMessageIsIn(t *testing.T) {
 	j := &recordingJournal{terminals: map[string]uint16{}}
 	clk := NewFakeClock()
@@ -657,9 +649,7 @@ func (r *recordingJournal) AppendTerminal(slot uint16, id string, _ TerminalKind
 }
 
 // The brief defines this one precisely: the age of the oldest non-expired,
-// non-in-flight message. Both exclusions matter -- counting an in-flight
-// message would make a queue that is being worked look stuck, and counting an
-// expired one would make a number that never comes down.
+// non-in-flight message.
 func TestOldestAgeIgnoresInFlightAndExpiredMessages(t *testing.T) {
 	q, clk := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
 
@@ -757,9 +747,7 @@ func TestAckingTwiceIsNotAnError(t *testing.T) {
 }
 
 // Without a dead-letter queue there is nowhere to put a message that keeps
-// failing, and dropping it would be a silent loss. So it stays and keeps being
-// redelivered -- the operator sees a message that will not go away, which is
-// the honest signal.
+// failing, and dropping it would be a silent loss.
 func TestWithoutADeadLetterQueueAMessageKeepsComingBack(t *testing.T) {
 	q, clk := newTestQueue(t, func(c *Config) {
 		c.MaxRetries = 2

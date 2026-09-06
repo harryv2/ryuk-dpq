@@ -30,13 +30,9 @@ func (s *slot) sweepLeases(now time.Time, maxRetries uint32, deadLetter bool) (d
 	return dead, requeued
 }
 
-// retire decides what happens to a message whose lease ended. It returns the
-// message if it must be dead-lettered, and whether it went back to ready.
-//
-// The asymmetry matters: the message returns to the FRONT of its group, because
-// it was the group's head and group order is strict; the group goes to the TAIL
-// of its band, so a message that keeps failing does not block the band head
-// every cycle.
+// retire decides what happens to a message whose lease ended. It goes back to
+// the front of its group (order is strict) but its group goes to the back of
+// its band, so a message that keeps failing does not block the band every cycle.
 func (s *slot) retire(
 	l *lease, now time.Time, maxRetries uint32, delay time.Duration, deadLetter bool,
 ) (*Message, bool) {
@@ -49,9 +45,7 @@ func (s *slot) retire(
 		s.st.bytes -= int64(len(m.Payload))
 		s.dropGroupIfIdle(g)
 		return nil, false
-	// Out of retries, and there is a dead-letter queue to move it to. Without
-	// one the message stays and keeps being redelivered: dropping it here
-	// would lose it with nothing to show for it.
+	// Out of retries, and there is a dead-letter queue to move it to.
 	case m.Attempts >= maxRetries && deadLetter:
 		s.st.deadLettered++
 		s.st.bytes -= int64(len(m.Payload))
@@ -94,10 +88,7 @@ func (s *slot) nack(
 	return dead, nil
 }
 
-// sweepTTL drops expired messages still sitting in ready. Only the front of
-// each group is checked: anything behind is dropped when it reaches the front.
-// Lazy expiry at take would be enough for correctness, but the oldest-age
-// metric is defined over non-expired messages.
+// sweepTTL drops expired messages still sitting in ready.
 func (s *slot) sweepTTL(now time.Time) int {
 	n := 0
 	for _, g := range s.groups {

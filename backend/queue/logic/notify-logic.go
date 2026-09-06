@@ -43,9 +43,7 @@ func (s *subscribers) remove(id uint64) {
 	}
 }
 
-// publish wakes as many gateways as there is work for, not all of them. Waking
-// everyone would mean several dequeues for one message and most coming back
-// empty.
+// publish wakes as many gateways as there is work for, not all of them.
 func (s *subscribers) publish(n Notification, count int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

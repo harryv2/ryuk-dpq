@@ -7,15 +7,8 @@ import (
 )
 
 // loadDotenv fills gaps in the environment before the config is built, so a
-// local run needs no exported variables. Best effort: a missing file is normal.
-//
-// A variable is only ever filled in, never replaced, so the first source wins
-// and files are read most specific first. The real environment beats all of
-// them, which is what lets a shared .env sit in the repo.
-//
-//	$RYUK_ENV_FILE   an explicit path, wins over both files
-//	.env.<service>   just this one
-//	.env             both services, fills whatever is left
+// local run needs no exported variables. First source to define a variable
+// wins: the real environment, then $RYUK_ENV_FILE, then .env.<service>, .env.
 func loadDotenv(service string) {
 	for _, name := range []string{os.Getenv("RYUK_ENV_FILE"), ".env." + service, ".env"} {
 		if name != "" {
@@ -44,10 +37,7 @@ func applyEnvFile(path string) {
 	}
 }
 
-// parseEnvLine reads one line. It reports ok=false for blanks, comments and
-// anything malformed, which are all skipped rather than failing the process:
-// a typo in a .env should not stop a node from starting with its real
-// environment.
+// parseEnvLine reads one line.
 func parseEnvLine(line string) (key, value string, ok bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {

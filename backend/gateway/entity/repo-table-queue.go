@@ -29,11 +29,7 @@ type QueueSettings struct {
 	PlacementWidth int `json:"placementWidth,omitempty"`
 }
 
-// QueueConfig is the stored record. OwnerNode says where the queue IS, which is
-// not where the hash says it should go: without replication the data exists in
-// one place, so ownership has to follow it.
-//
-// SlotOwners is filled in from the slot_placement table for distributed queues.
+// QueueConfig is the stored record.
 type QueueConfig struct {
 	Org         string            `json:"org"`
 	Name        string            `json:"name"`

@@ -55,11 +55,6 @@ func (r *Repo) client(addr string) (pb.QueueServiceClient, error) {
 
 // failed maps the error and, when the transport is the thing that broke, drops
 // the cached connection.
-//
-// A restarted container usually comes back on a new IP. The cached connection
-// still points at the old one, and gRPC's DNS resolver will not look again for
-// up to thirty seconds, so every call to a node that has just come back fails
-// until it does. Dropping the connection here means the next call dials fresh.
 func (r *Repo) failed(addr string, err error) error {
 	if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
 		r.mu.Lock()
@@ -272,9 +267,7 @@ func (r *Repo) Absorb(ctx context.Context, addr string, t entity.Transfer) error
 	return r.failed(addr, err)
 }
 
-// Subscribe opens the notification stream. It stays open until the context
-// ends or the node goes away, and the caller gets one notification per queue
-// that gains work.
+// Subscribe opens the notification stream.
 func (r *Repo) Subscribe(ctx context.Context, addr, gatewayID string) (<-chan entity.WorkAvailable, error) {
 	c, err := r.client(addr)
 	if err != nil {

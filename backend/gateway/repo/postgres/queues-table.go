@@ -105,13 +105,11 @@ func (t *QueuesTable) SetOwner(ctx context.Context, org, name, owner string, gen
 }
 
 // migrationLease is how long a gateway may hold a queue in 'migrating' before
-// another one may take it over. Long enough that a slow but live migration is
-// never stolen; short enough that a dead gateway does not strand a queue.
+// another one may take it over.
 const migrationLease = 2 * time.Minute
 
 // SetState guards the move into migrating: whichever gateway wins the update
-// owns the migration, and the others get a conflict and skip it. This is the
-// only coordination between gateways in the system.
+// owns the migration, and the others get a conflict and skip it.
 func (t *QueuesTable) SetState(ctx context.Context, org, name string, state entity.QueueState) error {
 	if state == entity.StateMigrating {
 		return t.takeMigrationLock(ctx, org, name)
@@ -122,9 +120,7 @@ func (t *QueuesTable) SetState(ctx context.Context, org, name string, state enti
 	return err
 }
 
-// takeMigrationLock claims the right to migrate this queue. Only one gateway can
-// hold it, and a lock left behind by a gateway that died is reclaimed once its
-// lease expires -- otherwise the queue would never rebalance again.
+// takeMigrationLock claims the right to migrate this queue.
 func (t *QueuesTable) takeMigrationLock(ctx context.Context, org, name string) error {
 	const q = `
 		UPDATE queues

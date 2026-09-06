@@ -22,12 +22,13 @@ func (l *QueueLogic) Enqueue(req entity.EnqueueRequest) (entity.EnqueueResponse,
 		DeliverAfter: req.DeliverAfter,
 	}
 
-	slot := lq.q.SlotFor(req.GroupID)
-	if req.Slot != nil {
-		slot = *req.Slot
+	// The gateway picks the slot, because for a distributed queue the slot is
+	// what chose this node in the first place. A node cannot second-guess it.
+	if req.Slot == nil {
+		return entity.EnqueueResponse{}, enterr.Invalid("slot is required")
 	}
 
-	m, err := lq.q.EnqueueToSlot(slot, opts)
+	m, err := lq.q.EnqueueToSlot(*req.Slot, opts)
 	switch {
 	case errors.Is(err, engine.ErrBadPriority):
 		return entity.EnqueueResponse{}, enterr.Invalid("priority must be 0-100")
@@ -40,5 +41,5 @@ func (l *QueueLogic) Enqueue(req entity.EnqueueRequest) (entity.EnqueueResponse,
 	}
 
 	l.notifyWork(req.Spec.Key(), req.Priority, 1)
-	return entity.EnqueueResponse{MessageID: m.ID, Slot: slot, Seq: m.Seq}, nil
+	return entity.EnqueueResponse{MessageID: m.ID, Slot: *req.Slot, Seq: m.Seq}, nil
 }

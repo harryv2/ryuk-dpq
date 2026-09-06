@@ -16,9 +16,7 @@ type Config struct {
 	StarvationReserve   float64
 	MaxDepth            int64
 	Distributed         bool
-	// HasDeadLetter says whether failures have anywhere to go. Without it a
-	// message that runs out of retries keeps being redelivered rather than
-	// being dropped, because dropping it would be a silent loss.
+	// HasDeadLetter says whether failures have anywhere to go.
 	HasDeadLetter bool
 }
 
@@ -103,14 +101,7 @@ func (q *Queue) Config() Config      { return *q.conf.Load() }
 func (q *Queue) Generation() uint64  { return q.generation }
 func (q *Queue) Incarnation() uint64 { return q.incarnation }
 
-// Reconfigure swaps the settings of a running queue. The key and the slot count
-// are not settings: they decide which slot a group lives in, so changing them
-// would send a group's later messages elsewhere.
-//
-// Nothing queued is rewritten, so when a change takes effect depends on where
-// the value is read: the visibility timeout applies from the next delivery, the
-// retry limit to messages already delivered. It reports whether anything moved,
-// because only the engine knows what a blank field defaults to.
+// Reconfigure swaps the settings of a running queue.
 func (q *Queue) Reconfigure(c Config) bool {
 	cur := q.conf.Load()
 	c.Key, c.Distributed = cur.Key, cur.Distributed
@@ -176,10 +167,6 @@ func (q *Queue) fanout(n int) int {
 }
 
 const msgsPerSlotTarget = 1000
-
-// SlotFor lets a caller that must choose before reaching the owning node get
-// the same answer.
-func (q *Queue) SlotFor(groupID string) uint16 { return q.slotFor(groupID) }
 
 func (q *Queue) slotFor(groupID string) uint16 {
 	if groupID != "" {
@@ -286,9 +273,7 @@ func (q *Queue) Nack(r Receipt, delay time.Duration) (*Message, error) {
 	return dead, err
 }
 
-// DeadLetter carries the slot the message was in. Recomputing it from the group
-// key gives the wrong answer for an ungrouped message, whose slot was chosen by
-// the gateway from something other than its id.
+// DeadLetter carries the slot the message was in.
 type DeadLetter struct {
 	Slot uint16
 	Msg  *Message
@@ -403,9 +388,7 @@ func (q *Queue) Freeze() map[uint16][]*Message {
 func (q *Queue) Thaw() { q.frozen.Store(false) }
 
 // FreezeSlots stops the named slots changing and returns copies of what they
-// hold. Unlike Freeze it does not remove anything: the messages stay here until
-// the new owner has them on disk and placement has moved, so a handoff that
-// fails leaves this node still able to serve them.
+// hold.
 func (q *Queue) FreezeSlots(ids []uint16) map[uint16][]*Message {
 	out := make(map[uint16][]*Message, len(ids))
 	for _, id := range ids {
@@ -425,9 +408,7 @@ func (q *Queue) FreezeSlots(ids []uint16) map[uint16][]*Message {
 	return out
 }
 
-// ThawSlots puts frozen slots back into service. Used when a handoff is
-// abandoned, and by the reconciler when it finds a slot frozen by a migration
-// that never finished.
+// ThawSlots puts frozen slots back into service.
 func (q *Queue) ThawSlots(ids []uint16) {
 	for _, id := range ids {
 		if int(id) < q.slotCount() {
@@ -551,11 +532,8 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 		for _, m := range delayed {
 			s.enqueue(m, now)
 		}
-		// A message arriving here is not a new submission: it is the same
-		// message moving between owners, or coming back from the log after a
-		// restart. Counting it again would make a migration look like a burst
-		// of traffic, and a rate over the counter would show a spike that never
-		// happened. s.enqueue counts, so the delayed ones are taken back off.
+		// A message arriving here is not a new submission: it is the same message
+		// moving between owners, or coming back from the log after a restart.
 		s.st.enqueued -= uint64(len(delayed))
 		s.refreshHint()
 		s.mu.Unlock()

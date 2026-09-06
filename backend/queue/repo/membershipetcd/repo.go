@@ -1,6 +1,4 @@
 // Package membershipetcd publishes this node under a lease it keeps renewing.
-// Stop renewing -- crash, kill, scale down -- and the key disappears, which is
-// the whole liveness mechanism.
 package membershipetcd
 
 import (
@@ -71,10 +69,7 @@ func (r *Repo) publish(
 	return r.cli.KeepAlive(ctx, lease.ID)
 }
 
-// keepRegistered publishes the node again whenever its lease ends. An etcd
-// outage longer than the TTL revokes it, and without this the node keeps
-// running and serving while every gateway believes it is gone -- its queues
-// unroutable, and nothing to put it back but a restart.
+// keepRegistered publishes the node again whenever its lease ends.
 func (r *Repo) keepRegistered(
 	ctx context.Context, id, addr string, ttlSeconds int64,
 	ch <-chan *clientv3.LeaseKeepAliveResponse,

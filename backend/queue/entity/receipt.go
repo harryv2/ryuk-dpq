@@ -9,9 +9,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
 )
 
-// EncodeReceipt makes the dequeue token. Routing and both generation counters
-// live here rather than in the message ID, because a receipt expires with its
-// delivery attempt and so can never outlive the layout it describes.
+// EncodeReceipt makes the dequeue token.
 func EncodeReceipt(r engine.Receipt) string {
 	raw := fmt.Sprintf("%d:%s:%d:%d", r.Slot, r.MessageID, r.Epoch, r.Incarnation)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))

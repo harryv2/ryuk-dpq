@@ -1,6 +1,4 @@
-// Package membershipetcd watches the live node list. A node holds a lease and
-// keeps renewing it, so a node that stops renewing simply disappears -- no
-// heartbeat table and no reaper.
+// Package membershipetcd watches the live node list.
 package membershipetcd
 
 import (
@@ -36,10 +34,7 @@ type Repo struct {
 
 	once sync.Once
 
-	// One channel per listener, not one shared. A membership change has to
-	// reach every watcher: the rebalancer and the notification subscriber both
-	// wait on this, and a single buffered channel delivers to whichever
-	// receives first, silently starving the other.
+	// One channel per listener, not one shared.
 	listenMu  sync.Mutex
 	listeners []chan struct{}
 }
@@ -64,9 +59,7 @@ func New(endpoints Endpoints, log *slog.Logger) (*Repo, func(), error) {
 	return r, func() { _ = cli.Close() }, nil
 }
 
-// Watch loads the current members and then follows changes. Watching rather
-// than polling is why a membership change reaches every gateway in
-// milliseconds instead of a poll interval.
+// Watch loads the current members and then follows changes.
 func (r *Repo) Watch(ctx context.Context) error {
 	rev, err := r.resync(ctx)
 	if err != nil {
@@ -78,8 +71,7 @@ func (r *Repo) Watch(ctx context.Context) error {
 
 // resync replaces the member list with what etcd holds now and reports the
 // revision it read at, so a watch can start from exactly there and miss
-// nothing. It replaces rather than merges: after a gap in the watch, a node
-// that left is absent from the snapshot and has to be dropped.
+// nothing.
 func (r *Repo) resync(ctx context.Context) (int64, error) {
 	resp, err := r.cli.Get(ctx, prefix, clientv3.WithPrefix())
 	if err != nil {
@@ -103,14 +95,7 @@ func (r *Repo) setMembers(members map[string]entity.Member) {
 	r.notify()
 }
 
-// follow keeps a watch open for the life of the process. A watch does end --
-// etcd restarts, the stream breaks, the revision it started from is compacted
-// away -- and without this the member list would freeze at whatever it held,
-// leaving placement and rebalancing working from a cluster that no longer
-// exists.
-//
-// The list is resynced before each retry, because events during the gap were
-// missed and only a fresh read says who is actually there.
+// follow keeps a watch open for the life of the process.
 func (r *Repo) follow(ctx context.Context, rev int64) {
 	backoff := minWatchBackoff
 	for {
@@ -197,9 +182,7 @@ func (r *Repo) notify() {
 	}
 }
 
-// Changed returns a channel that receives when the member list moves. Each call
-// registers a new listener, so call it once and keep the result rather than
-// inside a select loop.
+// Changed returns a channel that receives when the member list moves.
 func (r *Repo) Changed() <-chan struct{} {
 	ch := make(chan struct{}, 1)
 	r.listenMu.Lock()
@@ -229,8 +212,7 @@ func (r *Repo) Lookup(id string) (entity.Member, bool) {
 }
 
 // Entries reads every key the system owns, with the lease still holding each
-// one. Scoped to the prefix: etcd may be shared, and nothing outside it is any
-// of the gateway's business.
+// one.
 func (r *Repo) Entries(ctx context.Context) ([]entity.RegistryEntry, error) {
 	resp, err := r.cli.Get(ctx, registryPrefix, clientv3.WithPrefix())
 	if err != nil {

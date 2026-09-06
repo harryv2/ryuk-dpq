@@ -80,9 +80,7 @@ func (c QueueConfig) Spec() QueueSpec {
 	}
 }
 
-// NodeGRPCRepo is how the gateway talks to a node. StatsAll answers for every queue
-// on that node in one call, so collecting metrics costs one request per node
-// rather than one per queue.
+// NodeGRPCRepo is how the gateway talks to a node.
 type NodeGRPCRepo interface {
 	Enqueue(ctx context.Context, addr string, req NodeEnqueue) (NodeEnqueueResult, error)
 	Dequeue(ctx context.Context, addr string, spec QueueSpec, max int) ([]NodeMessage, error)
@@ -92,9 +90,8 @@ type NodeGRPCRepo interface {
 	StatsAll(ctx context.Context, addr string) (string, []NodeStats, error)
 	Drop(ctx context.Context, addr string, spec QueueSpec) error
 
-	// PrepareMove snapshots slots without removing them, so a handoff that
-	// fails leaves the old owner able to serve. DiscardMove is the point of no
-	// return; AbortMove puts them back.
+	// PrepareMove snapshots slots without removing them, so a handoff that fails
+	// leaves the old owner able to serve.
 	PrepareMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) (Transfer, error)
 	DiscardMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) error
 	AbortMove(ctx context.Context, addr string, spec QueueSpec, slots []uint16, moveID string) error
@@ -102,8 +99,7 @@ type NodeGRPCRepo interface {
 	Held(ctx context.Context, addr string) (HeldResponse, error)
 
 	// DeadLetters reads what a node has given up on; AckDeadLetters drops them
-	// once the gateway has moved them. Two calls on purpose: draining and
-	// dropping in one would lose the messages if the gateway died in between.
+	// once the gateway has moved them.
 	DeadLetters(ctx context.Context, addr string) ([]DeadLetterItem, error)
 	AckDeadLetters(ctx context.Context, addr string, ids []string) error
 
@@ -152,10 +148,7 @@ type HeldResponse struct {
 	Queues []HeldSlots
 }
 
-// DeadLetterItem is a message a node gave up on. The node cannot route it
-// itself -- it does not know which node owns the dead-letter queue, and
-// placement is the gateway's to read -- so it holds them and the gateway moves
-// them.
+// DeadLetterItem is a message a node gave up on.
 type DeadLetterItem struct {
 	Org      string
 	Name     string

@@ -14,8 +14,6 @@ const (
 	SlotsPerDistributedQueue = slotting.PerDistributedQueue
 
 	// DefaultPlacementWidth bounds how many machines one distributed queue uses.
-	// Six is past the point where partial availability means anything, and well
-	// short of making every queue a neighbour of every other.
 	DefaultPlacementWidth = 6
 	MinPlacementWidth     = 2
 	MaxPlacementWidth     = 64

@@ -1,6 +1,4 @@
-// Package prometheus reads history back out of Prometheus. It only queries:
-// Prometheus scrapes the gateway's /metrics endpoint, so nothing here pushes,
-// and no node is ever scraped directly.
+// Package prometheus reads history back out of Prometheus.
 package prometheus
 
 import (
@@ -55,9 +53,7 @@ func (r *Repo) Ready(ctx context.Context) bool {
 	return res.StatusCode == http.StatusOK
 }
 
-// The queries the metrics page can ask for. A fixed set rather than arbitrary
-// PromQL: the caller picks a queue and a window, and the gateway decides what
-// that means, so nothing user-supplied reaches the query language.
+// The queries the metrics page can ask for.
 const (
 	qReady     = `ryuk_queue_ready_messages{org=%q,queue=%q}`
 	qInFlight  = `ryuk_queue_inflight_messages{org=%q,queue=%q}`

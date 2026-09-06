@@ -4,9 +4,7 @@ import "context"
 
 //go:generate mockgen -source=repo-table-slot-placement.go -destination=../mocks/mock_slot_placement_table_repo.go -package=mocks
 
-// SlotPlacement is where one slot of a distributed queue lives. A normal queue
-// has no rows here: it is placed as a whole, so storing sixteen identical rows
-// would be recording the same fact sixteen times.
+// SlotPlacement is where one slot of a distributed queue lives.
 type SlotPlacement struct {
 	Org        string
 	QueueName  string

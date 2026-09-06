@@ -14,9 +14,7 @@ func (l *GatewayLogic) config(ctx context.Context, org, name string) (entity.Que
 		func() (entity.QueueConfig, error) { return l.loadConfig(ctx, org, name) })
 }
 
-// loadConfig joins the two tables. A normal queue is placed as a whole so its
-// owner is one column; a distributed queue is placed per slot, so its owners
-// come from the placement table.
+// loadConfig joins the two tables.
 func (l *GatewayLogic) loadConfig(ctx context.Context, org, name string) (entity.QueueConfig, error) {
 	cfg, err := l.queueTableRepo.Get(ctx, org, name)
 	if err != nil || !cfg.Distributed {

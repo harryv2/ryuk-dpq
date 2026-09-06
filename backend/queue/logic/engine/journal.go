@@ -8,9 +8,7 @@ const (
 	TerminalDeadLettered
 )
 
-// Journal is the write-ahead log. AppendEnqueue must flush before returning:
-// nothing becomes visible that is not already on disk. The rest are buffered,
-// because losing them costs at most one extra retry or one redelivery.
+// Journal is the write-ahead log.
 type Journal interface {
 	Incarnation() uint64
 	AppendEnqueue(slot uint16, m *Message) error

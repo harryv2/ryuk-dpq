@@ -236,8 +236,7 @@ func singleNodeCfg(owner string) entity.QueueConfig {
 }
 
 // A whole-queue move must hold a copy on the old owner until placement has
-// moved. Draining first meant a gateway that died before the new owner had the
-// messages lost them: they were only in a local variable in a stateless tier.
+// moved.
 func TestWholeQueueMoveKeepsACopyUntilItCommits(t *testing.T) {
 	ms := []entity.Member{{ID: "node-1", Addr: "n1:9090"}, {ID: "node-2", Addr: "n2:9090"}}
 	l, d := setupWithMembers(t, ms)

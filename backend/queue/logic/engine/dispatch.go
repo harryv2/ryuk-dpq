@@ -47,9 +47,7 @@ func (q *Queue) reserveTick(n uint64) bool {
 	return n%every == 0
 }
 
-// takeUrgent reads two atomics per slot, then locks only the winner. Comparing
-// headSeq at equal priority is what makes FIFO exact -- and why a distributed
-// queue, whose owner sees only a subset of slots, cannot promise it.
+// takeUrgent reads two atomics per slot, then locks only the winner.
 func (q *Queue) takeUrgent(now time.Time) (*Message, Receipt, bool) {
 	for attempt := 0; attempt < maxDispatchRetries; attempt++ {
 		var best *slot

@@ -9,10 +9,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/third_party/logger"
 )
 
-// The rebalancer and the notification subscriber both wait on this. A single
-// shared channel delivered to whichever received first, so a member joining
-// woke one and the other never learned -- and when the rebalancer lost, a
-// distributed queue never spread onto the new node.
+// The rebalancer and the notification subscriber both wait on this.
 func TestEveryListenerIsNotified(t *testing.T) {
 	r := &Repo{}
 	a, b, c := r.Changed(), r.Changed(), r.Changed()
@@ -51,8 +48,7 @@ func TestNotifyDoesNotBlockOnASlowListener(t *testing.T) {
 }
 
 // After a gap in the watch, a node that left while the stream was down is
-// absent from the fresh read. Merging the snapshot in would leave it behind
-// forever, and placement would keep routing to a machine that is gone.
+// absent from the fresh read.
 func TestResyncDropsAMemberThatLeftDuringTheGap(t *testing.T) {
 	r := &Repo{members: map[string]entity.Member{
 		"node-1": {ID: "node-1", Addr: "n1:9090"},

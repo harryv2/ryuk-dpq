@@ -53,9 +53,7 @@ type GatewayLogic struct {
 	subMu   sync.Mutex
 	subOpen map[string]bool
 
-	// One cache for every kind of value, each under its own key prefix. Reads
-	// and writes go through the helpers in cache-logic.go, so no caller here
-	// decides a TTL or handles a miss itself.
+	// One cache for every kind of value, each under its own key prefix.
 	cache *inmemorycache.InMemoryCache
 }
 

@@ -1,6 +1,4 @@
-// Package client is a small REST client for the gateway. The integration tests
-// go through the same public API a real caller would, so nothing here reaches
-// into the implementation.
+// Package client is a small REST client for the gateway.
 package client
 
 import (

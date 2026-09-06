@@ -15,9 +15,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/integration/cluster"
 )
 
-// The whole stack is started once and shared. Scenarios keep out of each
-// other's way by using a queue name of their own rather than by restarting
-// Docker between them, which would make the suite take an hour.
+// The whole stack is started once and shared.
 var (
 	stack  *cluster.Cluster
 	nodes  = flag.Int("nodes", 3, "how many queue nodes to start")

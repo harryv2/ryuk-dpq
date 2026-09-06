@@ -24,8 +24,6 @@ type CreateQueueRequest struct {
 }
 
 // UpdateQueueRequest reuses creation's fields so one validator serves both.
-// Distributed is a pointer here only so that setting it can be refused rather
-// than silently ignored.
 type UpdateQueueRequest struct {
 	CreateQueueRequest
 	Distributed *bool `json:"distributed,omitempty"`
@@ -52,9 +50,8 @@ type QueueSummary struct {
 type EnqueueRequest struct {
 	Org   string `json:"-"`
 	Queue string `json:"-"`
-	// PayloadEncoding says how to read Payload: "text" (the default) or
-	// "base64" for bytes that are not text. Guessing is not safe -- "m000" is
-	// both a plausible message and valid base64 -- so the caller says.
+	// PayloadEncoding says how to read Payload: "text" (the default) or "base64"
+	// for bytes that are not text.
 	Payload         string `json:"payload"`
 	PayloadEncoding string `json:"payloadEncoding,omitempty"`
 	Priority        any    `json:"priority"`
@@ -131,9 +128,7 @@ type QueueStatsResponse struct {
 	AsOf                    time.Time        `json:"asOf"`
 }
 
-// ClusterPlacement is one queue's footprint on one node. A distributed queue
-// appears on several nodes with a different Slots on each, so a plain list of
-// names would suggest one queue is many.
+// ClusterPlacement is one queue's footprint on one node.
 type ClusterPlacement struct {
 	Queue       string `json:"queue"`
 	Org         string `json:"org"`

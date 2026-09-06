@@ -8,15 +8,6 @@ import (
 )
 
 // Reconcile compares what nodes hold against what placement says they should.
-// This is what makes a handoff safe to interrupt: every failure leaves one of
-// two observable states, each with one correct resolution, so there is no
-// coordinator log and nothing to roll back.
-//
-//	a node holds slots it does not own   -> the move committed; drop them
-//	a node owns slots that are frozen    -> the move did not commit; thaw them
-//
-// It is level-triggered, so a queue that missed its rebalance converges on the
-// next pass rather than waiting for an unrelated membership change.
 func (l *GatewayLogic) Reconcile(ctx context.Context) {
 	members := l.membershipRepo.Members()
 	if len(members) == 0 {
@@ -38,10 +29,8 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 			owners[k] = c.SlotOwners
 			continue
 		}
-		// A single-node queue has no placement rows: it is placed whole, so
-		// every slot belongs to the one owner named on its row. Without this
-		// its moves would have no repair, and an interrupted one would leave
-		// the queue frozen and serving nothing.
+		// A single-node queue has no placement rows: it is placed whole, so every
+		// slot belongs to the one owner named on its row.
 		if c.OwnerNode == "" {
 			continue
 		}

@@ -51,9 +51,7 @@ func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 		return enterr.Internal("open queue", err)
 	}
 
-	// A handoff may be retried after a timeout or by the reconciler. Absorbing
-	// the same one twice would duplicate every message in it, so the id is
-	// remembered and a repeat is a success that does nothing.
+	// A handoff may be retried after a timeout or by the reconciler.
 	if req.MoveID != "" && !l.claimMove(req.Spec.Key(), req.MoveID) {
 		l.log.Info("absorb: already applied", "queue", req.Spec.Name, "move", req.MoveID)
 		return nil
@@ -87,8 +85,7 @@ func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 }
 
 // claimMove records a handoff id and reports whether this is the first time it
-// has been seen. Kept in memory: a restart replays the log, and the log holds
-// what was absorbed, so a repeat after a restart is already reflected there.
+// has been seen.
 func (l *QueueLogic) claimMove(key engine.QueueKey, moveID string) bool {
 	l.moveMu.Lock()
 	defer l.moveMu.Unlock()
@@ -104,8 +101,7 @@ func (l *QueueLogic) claimMove(key engine.QueueKey, moveID string) bool {
 }
 
 // PrepareMove holds the named slots out of service and returns copies of what
-// they hold. Nothing is removed: if the handoff fails, AbortMove puts this node
-// straight back to serving them.
+// they hold.
 func (l *QueueLogic) PrepareMove(spec entity.QueueSpec, slots []uint16) (map[uint16][]entity.WireMessage, error) {
 	lq, ok := l.lookup(spec.Key())
 	if !ok {

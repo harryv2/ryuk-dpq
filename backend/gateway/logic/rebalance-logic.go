@@ -15,17 +15,15 @@ const (
 	sweepEvery      = 60 * time.Second
 )
 
-// RunRebalancer moves queues onto machines that join. Placement is a pure
-// function of the member list, so working out what should move needs no
-// coordination; the only thing that needs care is not doing it twice.
+// RunRebalancer moves queues onto machines that join.
 func (l *GatewayLogic) RunRebalancer(ctx context.Context) {
 	var settleAt time.Time
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 
-	// A membership change is the fast path, but it is only an edge: a queue
-	// that missed its window -- locked, or the gateway restarted -- would stay
-	// unbalanced until something else moved. This sweep is the level.
+	// A membership change is the fast path, but it is only an edge: a queue that
+	// missed its window -- locked, or the gateway restarted -- would stay
+	// unbalanced until something else moved.
 	sweep := time.NewTicker(sweepEvery)
 	defer sweep.Stop()
 
@@ -117,8 +115,7 @@ func newMoveID() string {
 }
 
 // rebalanceSlots moves the slots of a distributed queue that no longer hash to
-// their current owner. Slots are grouped by where they are moving from and to,
-// so one handoff carries everything going the same way.
+// their current owner.
 func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfig, members []entity.Member) bool {
 	type route struct{ from, to string }
 	moves := map[route][]uint16{}
@@ -177,9 +174,7 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 		transfer.Spec.Generation = nextGen
 		transfer.MoveID = moveID
 
-		// 2. Put them on the new owner, which writes them to its log before
-		//    they become visible. Placement still names the old owner, so
-		//    nothing is asking the new one for them yet.
+		// 2.
 		if err := l.nodesGRPCRepo.Absorb(ctx, to.Addr, transfer); err != nil {
 			l.log.Warn("move: absorb, putting the slots back", "queue", cfg.Name, "err", err)
 			l.abort(ctx, from.Addr, spec, slots, moveID)
@@ -195,16 +190,16 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 			}
 		}
 		if !recorded {
-			// Placement is half written. Leave both copies alone; the
-			// reconciler compares what nodes hold against placement and
-			// finishes or undoes it.
+			// Placement is half written.
 			l.log.Warn("move: placement incomplete, leaving it to the reconciler",
 				"queue", cfg.Name, "move", moveID)
 			continue
 		}
 
-		// 4. Only now is it safe for the old owner to let go.
-		if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, spec, slots, moveID); err != nil {
+		// 4.
+		committed := spec
+		committed.Generation = nextGen
+		if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, committed, slots, moveID); err != nil {
 			l.log.Warn("move: discard, the reconciler will clean up", "queue", cfg.Name, "err", err)
 		}
 		l.log.Info("moved slots", "org", cfg.Org, "queue", cfg.Name,
@@ -214,9 +209,7 @@ func (l *GatewayLogic) rebalanceSlots(ctx context.Context, cfg entity.QueueConfi
 	return done > 0
 }
 
-// migrate hands a whole queue to a new owner. Same four phases as a slot move:
-// the old owner holds a copy until placement has moved, so a gateway that dies
-// part way through leaves the messages somewhere rather than nowhere.
+// migrate hands a whole queue to a new owner.
 func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from, to entity.Member) error {
 	// One gateway at a time. Whoever flips the state to migrating owns the move.
 	if err := l.queueTableRepo.SetState(ctx, cfg.Org, cfg.Name, entity.StateMigrating); err != nil {
@@ -260,8 +253,11 @@ func (l *GatewayLogic) migrate(ctx context.Context, cfg entity.QueueConfig, from
 		return err
 	}
 
-	// 4. Only now is it safe for the old owner to let go.
-	if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, spec, slots, moveID); err != nil {
+	// 4. Only now is it safe for the old owner to let go, at the generation
+	//    placement now holds.
+	committed := spec
+	committed.Generation = nextGen
+	if err := l.nodesGRPCRepo.DiscardMove(ctx, from.Addr, committed, slots, moveID); err != nil {
 		l.log.Warn("migrate: discard, the reconciler will clean up", "queue", cfg.Name, "err", err)
 	}
 

@@ -56,8 +56,7 @@ func (l *GatewayLogic) Dequeue(ctx context.Context, req entity.DequeueRequest) (
 	}
 
 	// Park until a node says this queue gained work, then issue exactly one
-	// dequeue. Fanning a waiting dequeue out would lease messages nobody is
-	// processing.
+	// dequeue.
 	k := key(req.Org, req.Queue)
 	ch := l.wait.park(k)
 	defer l.wait.unpark(k, ch)

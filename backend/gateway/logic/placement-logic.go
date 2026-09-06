@@ -7,9 +7,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
-// assignOwner picks where a queue should go. Rendezvous hashing is a pure
-// function of the member list, so every gateway gets the same answer and
-// nothing has to be elected.
+// assignOwner picks where a queue should go.
 func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool, width int) (entity.Member, error) {
 	members := l.membershipRepo.Members()
 	if len(members) == 0 {
@@ -27,9 +25,7 @@ func (l *GatewayLogic) assignOwner(org, name string, slot int, distributed bool,
 	return m, nil
 }
 
-// ownerAddr resolves where a queue actually is. The stored owner wins over the
-// hash: without replication the data exists in one place, so ownership has to
-// follow it rather than follow the current member list.
+// ownerAddr resolves where a queue actually is.
 func (l *GatewayLogic) ownerAddr(ctx context.Context, cfg entity.QueueConfig, slot int) (string, string, error) {
 	stored := cfg.OwnerNode
 	if cfg.Distributed {

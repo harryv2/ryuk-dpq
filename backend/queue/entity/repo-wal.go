@@ -8,9 +8,8 @@ type WALRepo interface {
 	engine.Journal
 	Replay() (map[uint16][]*engine.Message, error)
 
-	// Dead letters wait here until the gateway moves them into the queue's
-	// dead-letter queue. Written before the gateway is told, so a restart in
-	// between does not lose them.
+	// Dead letters wait here until the gateway moves them into the queue's dead-
+	// letter queue.
 	AppendDeadLetter(slot uint16, m *engine.Message) error
 	AppendDeadLetterDrained(id string) error
 	ReplayDeadLetters() ([]PendingDeadLetter, error)

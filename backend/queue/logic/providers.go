@@ -26,17 +26,13 @@ func ProvideEtcdEndpoints(cfg config.Node) membershipetcd.Endpoints {
 	return membershipetcd.Endpoints(cfg.Etcd)
 }
 
-// ProvideNodeIdentity reads the id that lives beside the data. A container
-// hostname changes on every recreate, and the id's job is to say who holds this
-// data, so it has to come from the volume.
+// ProvideNodeIdentity reads the id that lives beside the data.
 func ProvideNodeIdentity(dir DataDir) (NodeIdentity, error) {
 	id, err := walfile.NodeID(string(dir))
 	return NodeIdentity(id), err
 }
 
-// ProvideIncarnation bumps the restart counter. Lease generations restart from
-// zero after a replay, so without this a receipt from before a crash could match
-// a lease handed out after it.
+// ProvideIncarnation bumps the restart counter.
 func ProvideIncarnation(dir DataDir) (Incarnation, error) {
 	n, err := walfile.NextIncarnation(string(dir))
 	return Incarnation(n), err

@@ -7,12 +7,7 @@ import (
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity/enterr"
 )
 
-// UpdateQueue changes a queue's settings while it is running. Only the tunable
-// ones: placement and slot count decide where a group's messages live, so
-// changing them would send later messages of a group somewhere else.
-//
-// Nothing already queued is rewritten. Nodes pick the change up on their next
-// request, because the settings travel with every one.
+// UpdateQueue changes a queue's settings while it is running.
 func (l *GatewayLogic) UpdateQueue(ctx context.Context, req entity.UpdateQueueRequest) (entity.QueueSummary, error) {
 	cfg, err := l.config(ctx, req.Org, req.Name)
 	if err != nil {

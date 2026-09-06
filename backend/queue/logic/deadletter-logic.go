@@ -6,13 +6,10 @@ import (
 )
 
 // maxPendingDeadLetters bounds what one queue can hold if the gateway stops
-// draining. Past it the oldest are dropped, which is bad, but growing without
-// limit until the node dies is worse.
+// draining.
 const maxPendingDeadLetters = 10000
 
-// offerDeadLetter records a message the queue has given up on. It goes to the
-// log before it goes in memory: a node that restarts here must still know it
-// owes the gateway this message, or the message is gone.
+// offerDeadLetter records a message the queue has given up on.
 func (l *QueueLogic) offerDeadLetter(key engine.QueueKey, slot uint16, m *engine.Message) {
 	lq, ok := l.lookup(key)
 	if !ok {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/queue/entity"
+	"github.com/harryv2/ryuk-dpq/backend/queue/entity/enterr"
 	"github.com/harryv2/ryuk-dpq/backend/queue/logic/engine"
 )
 
@@ -215,10 +216,7 @@ func TestHeldSlotsReportsWhatIsFrozen(t *testing.T) {
 	}
 }
 
-// The difference between the two handoffs, side by side. Freeze empties the old
-// owner immediately, so between that call and the new owner confirming, the
-// only copy is a local variable inside a stateless gateway. PrepareMove leaves
-// the messages where they are until the move commits.
+// The difference between the two handoffs, side by side.
 func TestPrepareLeavesTheOldOwnerHoldingTheMessages(t *testing.T) {
 	spec := testSpec()
 	spec.Distributed = false
@@ -280,5 +278,16 @@ func TestDiscardAfterAWholeQueueMoveReleasesEverything(t *testing.T) {
 	}
 	if got := ready(t, from, spec); got != 0 {
 		t.Fatalf("old owner still holds %d after the move committed", got)
+	}
+}
+
+// The gateway owns the slot decision, so a request without one is a bug rather
+// than something to guess at.
+func TestEnqueueWithoutASlotIsRefused(t *testing.T) {
+	node, _ := newTestNode(t)
+	if _, err := node.Enqueue(entity.EnqueueRequest{
+		Spec: testSpec(), Payload: []byte("x"), Priority: 1,
+	}); enterr.CodeOf(err) != enterr.CodeInvalid {
+		t.Fatalf("want an invalid-request error, got %v", err)
 	}
 }
