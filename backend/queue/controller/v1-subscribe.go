@@ -18,10 +18,7 @@ func (s *Server) Subscribe(req *pb.SubscribeRequest, stream pb.QueueService_Subs
 			if !ok {
 				return nil
 			}
-			err := stream.Send(&pb.WorkAvailable{
-				Org: n.Org, Name: n.Name, BestPriority: uint32(n.BestPriority),
-			})
-			if err != nil {
+			if err := stream.Send(&pb.WorkAvailable{Org: n.Org, Name: n.Name}); err != nil {
 				return err
 			}
 		}

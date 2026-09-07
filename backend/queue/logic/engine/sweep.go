@@ -37,19 +37,17 @@ func (s *slot) retire(
 	l *lease, now time.Time, maxRetries uint32, delay time.Duration, deadLetter bool,
 ) (*Message, bool) {
 	g, m := l.g, l.msg
-	g.locked = false
+	defer s.unlock(g)
 
 	switch {
 	case m.expired(now):
 		s.st.expired++
 		s.st.bytes -= int64(len(m.Payload))
-		s.dropGroupIfIdle(g)
 		return nil, false
 	// Out of retries, and there is a dead-letter queue to move it to.
 	case m.Attempts >= maxRetries && deadLetter:
 		s.st.deadLettered++
 		s.st.bytes -= int64(len(m.Payload))
-		s.dropGroupIfIdle(g)
 		return m, false
 	}
 
@@ -58,16 +56,12 @@ func (s *slot) retire(
 		heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
 		s.st.delayed++
 		s.st.requeued++
-		s.dropGroupIfIdle(g)
 		return nil, true
 	}
 
 	g.msgs.pushFront(m)
 	s.st.ready[bucketOf(m.Priority)]++
 	s.st.requeued++
-	if !g.inBand {
-		s.pushGroup(g)
-	}
 	return nil, true
 }
 
@@ -106,9 +100,7 @@ func (s *slot) sweepTTL(now time.Time) int {
 		}
 		s.dropGroupIfIdle(g)
 	}
-	if n > 0 {
-		s.refreshHint()
-	}
+	s.refreshHint()
 	return n
 }
 

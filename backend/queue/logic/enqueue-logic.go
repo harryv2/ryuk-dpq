@@ -38,6 +38,6 @@ func (l *QueueLogic) Enqueue(req entity.EnqueueRequest) (entity.EnqueueResponse,
 		return entity.EnqueueResponse{}, enterr.Internal("enqueue", err)
 	}
 
-	l.notifyWork(req.Spec.Key(), req.Priority, 1)
+	l.notifyWork(req.Spec.Key())
 	return entity.EnqueueResponse{MessageID: m.ID, Slot: *req.Slot, Seq: m.Seq}, nil
 }

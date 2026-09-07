@@ -85,6 +85,7 @@ type Gateway struct {
 	CollectEvery time.Duration
 	Prometheus   string
 	CacheTTL     time.Duration
+	BackstopPoll time.Duration
 	StaticDir    string
 	LogLevel     string
 	LogFormat    string
@@ -100,6 +101,7 @@ func LoadGateway() Gateway {
 		CollectEvery: dur("RYUK_COLLECT_EVERY", 5*time.Second),
 		Prometheus:   str("RYUK_PROMETHEUS", ""),
 		CacheTTL:     dur("RYUK_CACHE_TTL", 30*time.Second),
+		BackstopPoll: dur("RYUK_BACKSTOP_POLL", 5*time.Second),
 		StaticDir:    str("RYUK_STATIC_DIR", ""),
 		LogLevel:     str("RYUK_LOG_LEVEL", "info"),
 		LogFormat:    str("RYUK_LOG_FORMAT", "text"),

@@ -31,32 +31,35 @@ func (l *GatewayLogic) Dequeue(ctx context.Context, req entity.DequeueRequest) (
 		// Slots are on different machines, so ask the one claiming the most
 		// urgent work and fall through if it comes back empty.
 		var lastErr error
+		answered := 0
 		for _, addr := range l.rankedOwners(cfg) {
 			msgs, err := l.nodesGRPCRepo.Dequeue(ctx, addr, cfg.Spec(), max)
 			if err != nil {
 				lastErr = err
 				continue
 			}
+			answered++
 			if len(msgs) > 0 {
 				return msgs, nil
 			}
 		}
-		if lastErr != nil {
+		// One owner being down does not make an empty queue a failure.
+		if answered == 0 && lastErr != nil {
 			return nil, lastErr
 		}
 		return nil, nil
 	}
 
-	msgs, err := take()
-	if err != nil || len(msgs) > 0 || req.WaitTime <= 0 {
+	if req.WaitTime <= 0 {
+		msgs, err := take()
 		if err != nil {
 			return entity.DequeueResponse{}, err
 		}
 		return entity.DequeueResponse{Messages: toMessages(msgs)}, nil
 	}
 
-	// Park until a node says this queue gained work, then issue exactly one
-	// dequeue.
+	// A message arriving while the first take is in flight would find nobody
+	// waiting, so register before it rather than after.
 	k := key(req.Org, req.Queue)
 	ch := l.wait.park(k)
 	defer l.wait.unpark(k, ch)
@@ -64,21 +67,31 @@ func (l *GatewayLogic) Dequeue(ctx context.Context, req entity.DequeueRequest) (
 	timer := time.NewTimer(req.WaitTime)
 	defer timer.Stop()
 
+	// Notifications are dropped rather than delivered late at both hops. This is
+	// what bounds the wait when one goes missing.
+	poll := time.NewTicker(l.cfg.BackstopPoll)
+	defer poll.Stop()
+
+	first := true
 	for {
+		msgs, err := take()
+		switch {
+		case err != nil && first:
+			return entity.DequeueResponse{}, err
+		case err != nil:
+			// Coming back empty is a normal answer to a poll; a 5xx is not.
+		case len(msgs) > 0:
+			return entity.DequeueResponse{Messages: toMessages(msgs)}, nil
+		}
+		first = false
+
 		select {
 		case <-ctx.Done():
 			return entity.DequeueResponse{}, ctx.Err()
 		case <-timer.C:
 			return entity.DequeueResponse{}, nil
+		case <-poll.C:
 		case <-ch:
-			msgs, err := take()
-			if err != nil {
-				return entity.DequeueResponse{}, err
-			}
-			if len(msgs) > 0 {
-				return entity.DequeueResponse{Messages: toMessages(msgs)}, nil
-			}
-			// another consumer won the race; keep waiting
 		}
 	}
 }

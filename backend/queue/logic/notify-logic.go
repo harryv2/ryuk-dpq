@@ -8,9 +8,8 @@ import (
 
 // Notification tells a gateway that a queue on this node gained work.
 type Notification struct {
-	Org          string
-	Name         string
-	BestPriority uint8
+	Org  string
+	Name string
 }
 
 // subscribers holds one channel per connected gateway. A gateway keeps one
@@ -43,24 +42,14 @@ func (s *subscribers) remove(id uint64) {
 	}
 }
 
-// publish wakes as many gateways as there is work for, not all of them.
-func (s *subscribers) publish(n Notification, count int) {
+// publish tells every connected gateway. The node cannot tell which of them has
+// a consumer waiting on this queue.
+func (s *subscribers) publish(n Notification) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if len(s.m) == 0 {
-		return
-	}
-	if count < 1 {
-		count = 1
-	}
-	sent := 0
 	for _, ch := range s.m {
-		if sent >= count {
-			return
-		}
 		select {
 		case ch <- n:
-			sent++
 		default: // a slow gateway is skipped rather than blocking the enqueue
 		}
 	}
@@ -72,6 +61,6 @@ func (l *QueueLogic) Subscribe() (uint64, <-chan Notification) {
 
 func (l *QueueLogic) Unsubscribe(id uint64) { l.subs.remove(id) }
 
-func (l *QueueLogic) notifyWork(key engine.QueueKey, priority uint8, count int) {
-	l.subs.publish(Notification{Org: key.Org, Name: key.Name, BestPriority: priority}, count)
+func (l *QueueLogic) notifyWork(key engine.QueueKey) {
+	l.subs.publish(Notification{Org: key.Org, Name: key.Name})
 }

@@ -112,9 +112,8 @@ type NodeGRPCRepo interface {
 }
 
 type WorkAvailable struct {
-	Org          string
-	Name         string
-	BestPriority uint8
+	Org  string
+	Name string
 }
 
 type Transfer struct {

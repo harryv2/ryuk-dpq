@@ -286,9 +286,7 @@ func (r *Repo) Subscribe(ctx context.Context, addr, gatewayID string) (<-chan en
 				return
 			}
 			select {
-			case out <- entity.WorkAvailable{
-				Org: msg.Org, Name: msg.Name, BestPriority: uint8(msg.BestPriority),
-			}:
+			case out <- entity.WorkAvailable{Org: msg.Org, Name: msg.Name}:
 			case <-ctx.Done():
 				return
 			}

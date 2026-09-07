@@ -179,6 +179,81 @@ func TestRetryKeepsGroupOrder(t *testing.T) {
 	_ = a2
 }
 
+func TestGroupSurvivesDeadLetteredHead(t *testing.T) {
+	q, _ := newTestQueue(t, func(c *Config) {
+		c.MaxRetries = 1
+		c.HasDeadLetter = true
+		c.StarvationReserve = 0
+	})
+	first := enq(t, q, High, "g")
+	second := enq(t, q, High, "g")
+
+	_, r := mustDequeue(t, q)
+	dead, err := q.Nack(r, 0)
+	if err != nil {
+		t.Fatalf("nack: %v", err)
+	}
+	if dead == nil || dead.ID != first.ID {
+		t.Fatal("first message should have dead-lettered")
+	}
+
+	got, _ := mustDequeue(t, q)
+	if got.ID != second.ID {
+		t.Fatal("the rest of the group must stay deliverable")
+	}
+}
+
+func TestGroupSurvivesExpiredHead(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	if _, err := q.Enqueue(EnqueueOptions{
+		Priority: High, GroupID: "g", TTL: 10 * time.Second,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second := enq(t, q, High, "g")
+
+	_, r := mustDequeue(t, q)
+	clk.Advance(11 * time.Second) // expires while the worker holds it
+	if _, err := q.Nack(r, 0); err != nil {
+		t.Fatalf("nack: %v", err)
+	}
+
+	got, _ := mustDequeue(t, q)
+	if got.ID != second.ID {
+		t.Fatal("the rest of the group must stay deliverable")
+	}
+}
+
+func TestGroupSurvivesDelayedRetry(t *testing.T) {
+	q, clk := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	first := enq(t, q, High, "g")
+	second := enq(t, q, High, "g")
+
+	_, r := mustDequeue(t, q)
+	if _, err := q.Nack(r, 10*time.Second); err != nil {
+		t.Fatalf("nack: %v", err)
+	}
+
+	got, r2 := mustDequeue(t, q)
+	if got.ID != second.ID {
+		t.Fatal("a delayed retry must not hold up the rest of its group")
+	}
+
+	clk.Advance(11 * time.Second)
+	q.Sweep()
+	if _, _, ok := q.Dequeue(); ok {
+		t.Fatal("the group is still locked; nothing else may go out")
+	}
+
+	if err := q.Ack(r2); err != nil {
+		t.Fatalf("ack: %v", err)
+	}
+	back, _ := mustDequeue(t, q)
+	if back.ID != first.ID {
+		t.Fatal("the delayed retry should come back once its delay is up")
+	}
+}
+
 func TestTTLExpiry(t *testing.T) {
 	q, clk := newTestQueue(t)
 	if _, err := q.Enqueue(EnqueueOptions{Priority: Medium, TTL: 10 * time.Second}); err != nil {

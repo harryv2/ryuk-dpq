@@ -173,7 +173,7 @@ message SubscribeRequest {
 message WorkAvailable {
   string org = 1;
   string name = 2;
-  uint32 best_priority = 3;
+  reserved 3; // was best_priority; a gateway wakes per queue, not per priority
 }
 
 message HealthResponse {

@@ -5,7 +5,6 @@ package logic
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/harryv2/ryuk-dpq/backend/gateway/entity"
@@ -15,6 +14,9 @@ import (
 type Config struct {
 	CacheTTL     time.Duration
 	CollectEvery time.Duration
+	// BackstopPoll is how often a waiting consumer re-asks anyway, so a lost
+	// notification costs a tick rather than the whole wait.
+	BackstopPoll time.Duration
 }
 
 type GatewayLogicInterface interface {
@@ -49,9 +51,7 @@ type GatewayLogic struct {
 	membershipRepo          entity.MembershipRepo
 	timeSeriesRepo          entity.TimeseriesRepo
 
-	wait    *waiters
-	subMu   sync.Mutex
-	subOpen map[string]bool
+	wait *waiters
 
 	// One cache for every kind of value, each under its own key prefix.
 	cache *inmemorycache.InMemoryCache
@@ -72,6 +72,9 @@ func New(
 	if cfg.CollectEvery <= 0 {
 		cfg.CollectEvery = 5 * time.Second
 	}
+	if cfg.BackstopPoll <= 0 {
+		cfg.BackstopPoll = 5 * time.Second
+	}
 	return &GatewayLogic{
 		cfg:                     cfg,
 		log:                     log,
@@ -81,7 +84,6 @@ func New(
 		membershipRepo:          members,
 		timeSeriesRepo:          series,
 		wait:                    newWaiters(),
-		subOpen:                 map[string]bool{},
 		cache:                   inmemorycache.NewInMemoryCache(log),
 	}
 }

@@ -31,7 +31,11 @@ func ProvidePrometheusURL(cfg config.Gateway) prometheus.BaseURL {
 }
 
 func ProvideConfig(cfg config.Gateway) Config {
-	return Config{CacheTTL: cfg.CacheTTL, CollectEvery: cfg.CollectEvery}
+	return Config{
+		CacheTTL:     cfg.CacheTTL,
+		CollectEvery: cfg.CollectEvery,
+		BackstopPoll: cfg.BackstopPoll,
+	}
 }
 
 func ProvideContext() context.Context { return context.Background() }

@@ -80,6 +80,9 @@ func (l *QueueLogic) Absorb(req entity.TransferRequest) error {
 	for _, m := range bySlot {
 		n += len(m)
 	}
+	if n > 0 {
+		l.notifyWork(req.Spec.Key())
+	}
 	l.log.Info("absorbed transfer", "org", req.Spec.Org, "queue", req.Spec.Name, "messages", n)
 	return nil
 }
