@@ -52,7 +52,6 @@ type Queue struct {
 	// delivery path, so they are swapped whole rather than field by field.
 	conf    atomic.Pointer[Config]
 	clock   Clock
-	cluster Cluster
 	journal Journal
 
 	slotsMu   sync.RWMutex
@@ -71,20 +70,16 @@ type Queue struct {
 	frozen   atomic.Bool
 }
 
-func New(cfg Config, clk Clock, cl Cluster, j Journal, generation uint64) *Queue {
+func New(cfg Config, clk Clock, j Journal, generation uint64) *Queue {
 	cfg.applyDefaults()
 	if clk == nil {
 		clk = SystemClock{}
-	}
-	if cl == nil {
-		cl = NewLocalCluster()
 	}
 	if j == nil {
 		j = NoopJournal{}
 	}
 	q := &Queue{
 		clock:       clk,
-		cluster:     cl,
 		journal:     j,
 		slots:       make(map[uint16]*slot),
 		generation:  generation,
@@ -143,13 +138,13 @@ func (q *Queue) slot(id uint16) *slot {
 
 // caller holds slotsMu for write
 func (q *Queue) rebuildLocalView() {
-	ids := q.cluster.LocalSlots(q.cfg().Key, q.slotCount())
-	view := make([]*slot, 0, len(ids))
-	for _, id := range ids {
-		if s := q.slots[id]; s != nil {
-			view = append(view, s)
-		}
+	view := make([]*slot, 0, len(q.slots))
+	for _, s := range q.slots {
+		view = append(view, s)
 	}
+	// Sorted so the starvation scan's round-robin covers slots evenly; map
+	// order would reshuffle it on every rebuild.
+	sort.Slice(view, func(i, j int) bool { return view[i].id < view[j].id })
 	q.localView.Store(&view)
 }
 
@@ -170,13 +165,10 @@ const msgsPerSlotTarget = 1000
 
 func (q *Queue) slotFor(groupID string) uint16 {
 	if groupID != "" {
-		return q.cluster.SlotFor(q.cfg().Key, groupID, q.slotCount())
+		return SlotOf(q.cfg().Key, groupID, q.slotCount())
 	}
-	local := q.cluster.LocalSlots(q.cfg().Key, q.slotCount())
-	if len(local) == 0 {
-		return 0
-	}
-	return local[q.rr.Add(1)%uint64(q.fanout(len(local)))]
+	n := q.slotCount()
+	return uint16(q.rr.Add(1) % uint64(q.fanout(n)))
 }
 
 func (q *Queue) Enqueue(o EnqueueOptions) (*Message, error) {

@@ -33,7 +33,7 @@ func (l *QueueLogic) queueFor(spec entity.QueueSpec) (*liveQueue, error) {
 		return nil, err
 	}
 	lq = &liveQueue{
-		q:   engine.New(spec.EngineConfig(), l.clock, l.cluster, wal, spec.Generation),
+		q:   engine.New(spec.EngineConfig(), l.clock, wal, spec.Generation),
 		wal: wal,
 	}
 	l.queues[key] = lq

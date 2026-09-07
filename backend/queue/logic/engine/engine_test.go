@@ -20,7 +20,7 @@ func newTestQueue(t *testing.T, mut ...func(*Config)) (*Queue, *FakeClock) {
 		f(&cfg)
 	}
 	clk := NewFakeClock()
-	return New(cfg, clk, NewLocalCluster(), NoopJournal{}, 1), clk
+	return New(cfg, clk, NoopJournal{}, 1), clk
 }
 
 func enq(t *testing.T, q *Queue, p Priority, group string) *Message {
@@ -614,7 +614,7 @@ func TestDeadLetterTerminalGoesToTheSlotTheMessageIsIn(t *testing.T) {
 		VisibilityTimeout: time.Second,
 		MaxRetries:        1,
 		HasDeadLetter:     true,
-	}, clk, NewLocalCluster(), j, 1)
+	}, clk, j, 1)
 
 	// Ungrouped, and placed by slot the way the gateway places one.
 	const placed uint16 = 7

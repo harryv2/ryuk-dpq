@@ -7,43 +7,32 @@ import (
 	"time"
 )
 
-func benchQueue(slots int) *Queue {
-	all := make([]uint16, slots)
-	for i := range all {
-		all[i] = uint16(i)
-	}
+func benchQueue() *Queue {
 	cfg := Config{
 		Key:               QueueKey{Org: "o", Name: "q"},
 		VisibilityTimeout: time.Hour,
 		MaxRetries:        3,
 		StarvationReserve: 0,
+		Distributed:       true,
 	}
-	return New(cfg, SystemClock{}, &fixedCluster{all: all, n: slots}, NoopJournal{}, 1)
+	return New(cfg, SystemClock{}, NoopJournal{}, 1)
 }
-
-// fixedCluster pins the slot count so the benchmark can vary it.
-type fixedCluster struct {
-	all []uint16
-	n   int
-}
-
-func (c *fixedCluster) SlotFor(q QueueKey, groupID string, _ int) uint16 {
-	return uint16(SlotOf(q, groupID, c.n)) % uint16(c.n)
-}
-func (c *fixedCluster) LocalSlots(QueueKey, int) []uint16 { return c.all }
 
 // BenchmarkRoundTrip measures enqueue, dequeue and ack under contention, which
-// is what the slot lock actually guards.
+// is what the slot lock actually guards. Spreading the load over more slots is
+// what buys the parallelism, so that is the variable.
 func BenchmarkRoundTrip(b *testing.B) {
 	for _, slots := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("slots=%d", slots), func(b *testing.B) {
-			q := benchQueue(slots)
+			q := benchQueue()
 			var n atomic.Uint64
 			b.ResetTimer()
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					i := n.Add(1)
-					_, err := q.Enqueue(EnqueueOptions{
+					// The gateway picks the slot in production; here the
+					// benchmark does, so it can vary how wide the load spreads.
+					_, err := q.EnqueueToSlot(uint16(i%uint64(slots)), EnqueueOptions{
 						Payload:  []byte("x"),
 						Priority: Priority(i % 101),
 						GroupID:  fmt.Sprintf("g%d", i%256),

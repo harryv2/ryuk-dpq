@@ -52,11 +52,10 @@ type QueueLogic struct {
 	moveMu       sync.Mutex
 	appliedMoves map[string]bool // handoffs already absorbed, so a retry is a no-op
 
-	cfg     Config
-	log     *slog.Logger
-	clock   engine.Clock
-	cluster engine.Cluster
-	wals    entity.WALFactory
+	cfg   Config
+	log   *slog.Logger
+	clock engine.Clock
+	wals  entity.WALFactory
 
 	mu     sync.RWMutex
 	queues map[engine.QueueKey]*liveQueue
@@ -80,13 +79,12 @@ func New(cfg Config, log *slog.Logger, clock engine.Clock, wals entity.WALFactor
 		cfg.SweepEvery = 200 * time.Millisecond
 	}
 	return &QueueLogic{
-		cfg:     cfg,
-		log:     log,
-		clock:   clock,
-		cluster: engine.NewLocalCluster(),
-		wals:    wals,
-		queues:  make(map[engine.QueueKey]*liveQueue),
-		subs:    newSubscribers(),
+		cfg:    cfg,
+		log:    log,
+		clock:  clock,
+		wals:   wals,
+		queues: make(map[engine.QueueKey]*liveQueue),
+		subs:   newSubscribers(),
 	}
 }
 

@@ -22,8 +22,6 @@ func (l *QueueLogic) Enqueue(req entity.EnqueueRequest) (entity.EnqueueResponse,
 		DeliverAfter: req.DeliverAfter,
 	}
 
-	// The gateway picks the slot, because for a distributed queue the slot is
-	// what chose this node in the first place. A node cannot second-guess it.
 	if req.Slot == nil {
 		return entity.EnqueueResponse{}, enterr.Invalid("slot is required")
 	}
