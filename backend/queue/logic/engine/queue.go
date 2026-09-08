@@ -518,9 +518,10 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 				s.groups[gid] = g
 			}
 			g.msgs.prepend(list)
+			// Not a new submission: the same message moving between owners, or
+			// coming back from the log after a restart.
 			for _, m := range list {
-				s.st.ready[bucketOf(m.Priority)]++
-				s.st.bytes += int64(len(m.Payload))
+				s.move(m, stAbsent, stReady)
 			}
 			// The head may have changed, so the band entry must be reissued.
 			g.version++
@@ -530,11 +531,8 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 			}
 		}
 		for _, m := range delayed {
-			s.enqueue(m, now)
+			s.hold(m, stAbsent)
 		}
-		// A message arriving here is not a new submission: it is the same message
-		// moving between owners, or coming back from the log after a restart.
-		s.st.enqueued -= uint64(len(delayed))
 		s.refreshHint()
 		s.mu.Unlock()
 

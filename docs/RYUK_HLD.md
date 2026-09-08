@@ -1601,8 +1601,17 @@ today and cover most of what quotas would.
 **Two-pass migration.** Ship the bulk, then a locked delta, so a handoff never freezes
 enqueues at all.
 
-**Storage beyond memory.** Keeping only the front of each priority list in memory would
-move the backlog ceiling from memory to disk.
+**Payload on disk, pointer in memory.** The engine never looks inside a payload.
+Priority, groups, expiry, starvation and every other decision run on metadata alone, and
+the bytes are dereferenced once, at delivery. They are also already on disk, because the
+log records them before the message becomes visible — so a queue holds every payload
+twice. Replacing the payload with the location of the record that already holds it, as a
+slot, an offset and a length, leaves roughly two hundred bytes a message in memory
+instead of up to 256 KiB, and moves the backlog ceiling from memory to disk. Measured,
+195 MiB of payload costs 326 MiB of memory and 266 MiB of log. Delivery pays one read,
+which for a queue that is keeping up comes from the page cache. Compaction is the part
+that needs care: rewriting a log moves every record in it, so the pointers have to move
+with them.
 
 **Batched submission.** A real throughput win that brings partial failure with it, which
 needs a response shape that makes that unambiguous.

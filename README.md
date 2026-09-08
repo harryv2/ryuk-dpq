@@ -471,6 +471,16 @@ how a cluster grows, and what it costs — is in
   An idempotency key would fix it.
 - **Redrive from the dead-letter queue.** Messages can go to a DLQ but not come
   back once the bug is fixed.
+- **Payload on disk, pointer in memory.** The engine never reads a payload —
+  priority, groups, expiry and every other decision run on metadata, and the
+  bytes are dereferenced once, at delivery. They are already on disk too, since
+  `AppendEnqueue` writes them to the log before the message is visible, so a
+  queue holds every payload twice. Keeping `{slot, offset, length}` instead
+  leaves about 200 bytes a message in memory rather than up to 256 KiB, and
+  moves the depth ceiling from RAM to disk. Measured, 195 MiB of payload costs
+  326 MiB of node memory and 266 MiB of log. The price is one read at delivery,
+  usually from the page cache, and compaction having to move the pointers when
+  it rewrites a log.
 - **More slots.** 64 is small. With 20 machines the busiest holds about twice
   its fair share, and no queue can ever use more than 64 machines. Going to
   1024 improves balance and removes the ceiling, at the cost of more log files.

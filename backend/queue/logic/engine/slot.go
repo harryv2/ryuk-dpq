@@ -124,14 +124,23 @@ func (s *slot) dropBand(p Priority) {
 }
 
 func (s *slot) enqueue(m *Message, now time.Time) {
+	s.st.enqueued++
 	if !m.DeliverAfter.IsZero() && m.DeliverAfter.After(now) {
-		heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
-		s.st.delayed++
-		s.st.enqueued++
-		s.st.bytes += int64(len(m.Payload))
+		s.hold(m, stAbsent)
 		return
 	}
+	s.move(m, stAbsent, stReady)
+	s.admit(m)
+	s.refreshHint()
+}
 
+func (s *slot) hold(m *Message, from msgState) {
+	heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
+	s.move(m, from, stDelayed)
+}
+
+// admit expects the caller to have recorded the move already.
+func (s *slot) admit(m *Message) {
 	gid := m.group()
 	g := s.groups[gid]
 	if g == nil {
@@ -139,15 +148,9 @@ func (s *slot) enqueue(m *Message, now time.Time) {
 		s.groups[gid] = g
 	}
 	g.msgs.pushBack(m)
-
-	s.st.enqueued++
-	s.st.ready[bucketOf(m.Priority)]++
-	s.st.bytes += int64(len(m.Payload))
-
 	if !g.locked && !g.inBand {
 		s.pushGroup(g)
 	}
-	s.refreshHint()
 }
 
 func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Receipt, bool) {
@@ -184,8 +187,7 @@ func (s *slot) take(p Priority, now time.Time, vis time.Duration) (*Message, Rec
 	s.inflight[m.ID] = l
 	heap.Push(&s.timers, timerEntry{id: m.ID, epoch: l.epoch, at: l.deadline})
 
-	s.st.ready[bucketOf(m.Priority)]--
-	s.st.inflight++
+	s.move(m, stReady, stInFlight)
 	s.refreshHint()
 
 	// A copy, not the live message: the slot keeps mutating the original after
@@ -205,9 +207,8 @@ func (s *slot) ack(r Receipt) error {
 		return ErrLeaseExpired
 	}
 	delete(s.inflight, r.MessageID)
-	s.st.inflight--
+	s.move(l.msg, stInFlight, stAbsent)
 	s.st.acked++
-	s.st.bytes -= int64(len(l.msg.Payload))
 	s.unlock(l.g)
 	s.refreshHint()
 	return nil
@@ -231,9 +232,8 @@ func (s *slot) dropGroupIfIdle(g *group) {
 }
 
 func (s *slot) dropExpired(m *Message) {
+	s.move(m, stReady, stAbsent)
 	s.st.expired++
-	s.st.ready[bucketOf(m.Priority)]--
-	s.st.bytes -= int64(len(m.Payload))
 }
 
 // headMessage returns the first deliverable message of a band without removing
@@ -304,11 +304,6 @@ func (s *slot) stats(now time.Time) Stats {
 		DeadLettered: s.st.deadLettered,
 		TopReady:     -1,
 	}
-	// The same superset the dispatcher picks a slot with, so a node is ranked on
-	// exactly what it would serve.
-	if p, ok := s.highestBand(); ok {
-		st.TopReady = int16(p)
-	}
 	// Every group, not every band head: a redelivered group goes to the back of
 	// its band, so a head scan misses exactly the messages that have waited
 	// longest. Within a group the front is the oldest, so one probe each covers
@@ -320,6 +315,13 @@ func (s *slot) stats(now time.Time) Stats {
 		}
 		if age := now.Sub(m.EnqueuedAt); age > st.OldestAge {
 			st.OldestAge = age
+		}
+		// Not the band mask: a band keeps its bit until something pops the stale
+		// entry, so the mask names priorities this slot can no longer serve and
+		// the gateway ranks the node on work that is not there. A locked group
+		// is not servable either, however old its front is.
+		if !g.locked && int16(m.Priority) > st.TopReady {
+			st.TopReady = int16(m.Priority)
 		}
 	}
 	if st.OldestAge < 0 {

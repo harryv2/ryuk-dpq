@@ -15,6 +15,50 @@ type slotStats struct {
 	deadLettered uint64
 }
 
+// Where a message is. Exactly one at a time, so the gauges are a partition.
+type msgState uint8
+
+const (
+	stAbsent msgState = iota
+	stReady
+	stInFlight
+	stDelayed
+)
+
+// resetGauges empties the slot without rewriting its history, so handing slots
+// away does not take the lifetime totals backwards.
+func (t *slotStats) resetGauges() {
+	t.ready = [3]int64{}
+	t.inflight = 0
+	t.delayed = 0
+	t.bytes = 0
+}
+
+// move is both sides of a transition, so a caller cannot adjust one gauge and
+// forget the other. Callers hold s.mu.
+func (s *slot) move(m *Message, from, to msgState) {
+	switch from {
+	case stReady:
+		s.st.ready[bucketOf(m.Priority)]--
+	case stInFlight:
+		s.st.inflight--
+	case stDelayed:
+		s.st.delayed--
+	case stAbsent:
+		s.st.bytes += int64(len(m.Payload))
+	}
+	switch to {
+	case stReady:
+		s.st.ready[bucketOf(m.Priority)]++
+	case stInFlight:
+		s.st.inflight++
+	case stDelayed:
+		s.st.delayed++
+	case stAbsent:
+		s.st.bytes -= int64(len(m.Payload))
+	}
+}
+
 type Stats struct {
 	Ready     [3]int64
 	InFlight  int64

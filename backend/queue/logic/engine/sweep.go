@@ -16,8 +16,6 @@ func (s *slot) sweepLeases(now time.Time, maxRetries uint32, deadLetter bool) (d
 			continue // acknowledged already, or leased again since
 		}
 		delete(s.inflight, e.id)
-		s.st.inflight--
-
 		m, back := s.retire(l, now, maxRetries, 0, deadLetter)
 		if m != nil {
 			dead = append(dead, m)
@@ -41,26 +39,25 @@ func (s *slot) retire(
 
 	switch {
 	case m.expired(now):
+		s.move(m, stInFlight, stAbsent)
 		s.st.expired++
-		s.st.bytes -= int64(len(m.Payload))
 		return nil, false
 	// Out of retries, and there is a dead-letter queue to move it to.
 	case m.Attempts >= maxRetries && deadLetter:
+		s.move(m, stInFlight, stAbsent)
 		s.st.deadLettered++
-		s.st.bytes -= int64(len(m.Payload))
 		return m, false
 	}
 
 	if delay > 0 {
 		m.DeliverAfter = now.Add(delay)
-		heap.Push(&s.delayed, delayEntry{msg: m, at: m.DeliverAfter})
-		s.st.delayed++
+		s.hold(m, stInFlight)
 		s.st.requeued++
 		return nil, true
 	}
 
 	g.msgs.pushFront(m)
-	s.st.ready[bucketOf(m.Priority)]++
+	s.move(m, stInFlight, stReady)
 	s.st.requeued++
 	return nil, true
 }
@@ -76,7 +73,6 @@ func (s *slot) nack(
 		return nil, ErrLeaseExpired
 	}
 	delete(s.inflight, r.MessageID)
-	s.st.inflight--
 	dead, _ := s.retire(l, now, maxRetries, delay, deadLetter)
 	s.refreshHint()
 	return dead, nil
@@ -118,11 +114,12 @@ func (s *slot) releaseDelayed(now time.Time) int {
 	for s.delayed.Len() > 0 && !s.delayed[0].at.After(now) {
 		e := heap.Pop(&s.delayed).(delayEntry)
 		e.msg.DeliverAfter = time.Time{}
-		s.st.delayed--
-		s.st.enqueued--                         // enqueue counts it again
-		s.st.bytes -= int64(len(e.msg.Payload)) // and adds the bytes again
-		s.enqueue(e.msg, now)
+		s.move(e.msg, stDelayed, stReady)
+		s.admit(e.msg)
 		n++
+	}
+	if n > 0 {
+		s.refreshHint()
 	}
 	return n
 }
@@ -167,7 +164,7 @@ func (s *slot) drain() []*Message {
 	s.bands = make(map[Priority]*deque[bandEntry])
 	s.bandMask = [2]uint64{}
 	s.timers = nil
-	s.st = slotStats{}
+	s.st.resetGauges()
 	s.refreshHint()
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
