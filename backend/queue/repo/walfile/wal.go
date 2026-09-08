@@ -50,8 +50,56 @@ type WAL struct {
 }
 
 type slotFile struct {
-	mu sync.Mutex
-	f  *os.File
+	mu   sync.Mutex
+	cond *sync.Cond
+	f    *os.File
+
+	// Group commit. Appends number themselves, one flush covers every append
+	// before it, and the rest wait on that result instead of each queueing a
+	// flush of their own.
+	written uint64
+	synced  uint64
+	flushes uint64
+	syncing bool
+	syncErr error
+}
+
+func newSlotFile(f *os.File) *slotFile {
+	sf := &slotFile{f: f}
+	sf.cond = sync.NewCond(&sf.mu)
+	return sf
+}
+
+// syncThrough returns once a flush has covered seq. The lock is released while
+// the flush runs, so producers arriving during it are picked up by the next one
+// rather than waiting for a flush each.
+//
+// caller holds sf.mu, and holds it again on return
+func (sf *slotFile) syncThrough(seq uint64) error {
+	for {
+		if sf.synced >= seq {
+			return sf.syncErr
+		}
+		if !sf.syncing {
+			break
+		}
+		sf.cond.Wait()
+	}
+
+	sf.syncing = true
+	target, f := sf.written, sf.f
+	sf.flushes++
+	sf.mu.Unlock()
+	err := f.Sync()
+	sf.mu.Lock()
+
+	if err == nil && target > sf.synced {
+		sf.synced = target
+	}
+	sf.syncErr = err
+	sf.syncing = false
+	sf.cond.Broadcast()
+	return err
 }
 
 func Open(opts Options, incarnation uint64) (*WAL, error) {
@@ -119,7 +167,7 @@ func (w *WAL) slot(id uint16) (*slotFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	sf := &slotFile{f: f}
+	sf := newSlotFile(f)
 	w.slots[id] = sf
 	return sf, nil
 }
@@ -140,15 +188,16 @@ func (w *WAL) append(id uint16, kind recordKind, v any, durable bool) error {
 	sf.mu.Lock()
 	defer sf.mu.Unlock()
 
-	// A single Write reaches the page cache, so the record survives the process
-	// dying. Only power loss needs the fsync below.
+	// The write alone reaches the page cache, so the record already survives the
+	// process dying. The flush below is what carries it through power loss.
 	if _, err := sf.f.Write(buf); err != nil {
 		return err
 	}
-	if durable && w.opts.Sync == SyncAlways {
-		return sf.f.Sync()
+	sf.written++
+	if !durable || w.opts.Sync != SyncAlways {
+		return nil
 	}
-	return nil
+	return sf.syncThrough(sf.written)
 }
 
 func (w *WAL) AppendEnqueue(slot uint16, m *engine.Message) error {
@@ -187,7 +236,7 @@ func (w *WAL) syncAll() {
 
 	for _, sf := range files {
 		sf.mu.Lock()
-		_ = sf.f.Sync()
+		_ = sf.syncThrough(sf.written)
 		sf.mu.Unlock()
 	}
 }

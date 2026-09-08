@@ -8,6 +8,9 @@ tracks each message from submission to completion, and reports metrics.
 
 **Design:** [`docs/RYUK_HLD.md`](docs/RYUK_HLD.md) — the whole system, and why.
 
+**Replication:** [`docs/REPLICATION_HLD.md`](docs/REPLICATION_HLD.md) — what a replicated
+priority queue looks like, and why this one is not one.
+
 **Component detail:**
 [queue engine](docs/lld/01-queue-engine.md) ·
 [write-ahead log](docs/lld/02-write-ahead-log.md) ·
@@ -453,6 +456,10 @@ the Cassandra shape. Promotion would be a single row update — `slot_placement`
 already stores an owner and a generation number, and that generation is already
 the fencing token that stops a demoted owner from carrying on.
 
+The full shape of that design — consensus, what is replicated and what is not,
+how a cluster grows, and what it costs — is in
+[`docs/REPLICATION_HLD.md`](docs/REPLICATION_HLD.md).
+
 **Smaller things, in the order I would do them:**
 
 - **Extend a lease while working.** A worker that needs longer than the
@@ -477,7 +484,13 @@ be the same for both kinds first.
 
 ## Known limits
 
-- **One copy of the data**, as above.
+- **Not replicated, deliberately.** There is one copy of every message. Doing it
+  properly means consensus on the write path, a leader per slot, snapshots and
+  catch-up for a returning machine, and a coordinator that is the only thing
+  allowed to move data — a system several times the size of this one, and most of
+  it unrelated to the priority queue the brief asks for. What that design looks
+  like, and what it costs, is written up in
+  [`docs/REPLICATION_HLD.md`](docs/REPLICATION_HLD.md).
 - **A single-node queue waits for its machine.** If the owner is down the queue
   returns 503 rather than being reassigned, because the messages are only there.
   Reassigning would serve an empty queue and quietly lose the real one.

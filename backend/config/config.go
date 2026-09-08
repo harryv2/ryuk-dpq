@@ -60,7 +60,7 @@ func LoadNode() Node {
 		Listen:      str("RYUK_LISTEN", ":9090"),
 		AdvertiseAs: str("RYUK_ADVERTISE", ""),
 		DataDir:     str("RYUK_DATA_DIR", "./data"),
-		WALSync:     str("RYUK_WAL_SYNC", "interval"),
+		WALSync:     str("RYUK_WAL_SYNC", "always"),
 		WALInterval: dur("RYUK_WAL_INTERVAL", 100*time.Millisecond),
 		SweepEvery:  dur("RYUK_SWEEP_EVERY", 200*time.Millisecond),
 		Etcd:        list("RYUK_ETCD", nil),

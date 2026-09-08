@@ -369,3 +369,101 @@ func TestCompactKeepsAppendsThatLandedDuringIt(t *testing.T) {
 			missing, len(accepted))
 	}
 }
+
+// flushes reports how many fsyncs a slot has performed, so a test can tell a
+// batched commit from one flush per append.
+func flushes(t *testing.T, w *WAL, id uint16) uint64 {
+	t.Helper()
+	sf, err := w.slot(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf.mu.Lock()
+	defer sf.mu.Unlock()
+	return sf.flushes
+}
+
+// An enqueue that has been acknowledged has to be on the disk, not just in the
+// page cache, or a host losing power loses messages the producer was told were
+// safe.
+func TestAlwaysFlushesBeforeTheAppendReturns(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncAlways}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	for i := 0; i < 5; i++ {
+		if err := w.AppendEnqueue(0, msg(fmt.Sprintf("m%d", i), uint64(i))); err != nil {
+			t.Fatal(err)
+		}
+		sf, err := w.slot(0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sf.mu.Lock()
+		synced, written := sf.synced, sf.written
+		sf.mu.Unlock()
+		if synced < written {
+			t.Fatalf("append %d returned with %d of %d writes flushed", i, synced, written)
+		}
+	}
+}
+
+// The attempt and terminal records are not worth a flush each: losing one costs
+// a redelivery, which at-least-once already allows.
+func TestOnlyEnqueuesPayForAFlush(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncAlways}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	if err := w.AppendEnqueue(0, msg("a", 0)); err != nil {
+		t.Fatal(err)
+	}
+	after := flushes(t, w, 0)
+	for i := 0; i < 20; i++ {
+		w.AppendAttempt(0, "a", uint32(i), uint64(i))
+		w.AppendTerminal(0, "a", engine.TerminalAck)
+	}
+	if got := flushes(t, w, 0); got != after {
+		t.Fatalf("flushes went from %d to %d; only enqueues should flush", after, got)
+	}
+}
+
+// Producers arriving while a flush is running are covered by the next one, so a
+// burst costs far fewer flushes than it has messages.
+func TestConcurrentEnqueuesShareAFlush(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncAlways}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	const producers, each = 8, 50
+	var wg sync.WaitGroup
+	for p := 0; p < producers; p++ {
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			for i := 0; i < each; i++ {
+				if err := w.AppendEnqueue(0, msg(fmt.Sprintf("p%d-%d", p, i), uint64(i))); err != nil {
+					t.Errorf("append: %v", err)
+					return
+				}
+			}
+		}(p)
+	}
+	wg.Wait()
+
+	total := uint64(producers * each)
+	got := flushes(t, w, 0)
+	if got > total {
+		t.Fatalf("%d flushes for %d appends, want them batched", got, total)
+	}
+	t.Logf("%d appends cost %d flushes (%.1f per flush)", total, got, float64(total)/float64(got))
+}
