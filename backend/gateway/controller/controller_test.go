@@ -147,3 +147,40 @@ func TestDequeueClampsWaitTime(t *testing.T) {
 		t.Fatalf("wait time should be capped at %v, got %v", constants.MaxWaitTime, req.WaitTime)
 	}
 }
+
+func TestStarvationAvoidanceIsOffUnlessAskedFor(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"absent", `{"name":"orders"}`, false},
+		{"explicit false", `{"name":"orders","starvationAvoidanceEnabled":false}`, false},
+		{"explicit true", `{"name":"orders","starvationAvoidanceEnabled":true}`, true},
+		{"reserve alone does not enable it", `{"name":"orders","starvationReserve":0.4}`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req, err := createReq(c.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := req.ParseQueueSettings.StarvationAvoidanceEnabled; got != c.want {
+				t.Fatalf("starvationAvoidanceEnabled = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// The flag has to survive the hop to a node, or turning it on in the UI changes
+// nothing.
+func TestStarvationAvoidanceReachesTheNodeSpec(t *testing.T) {
+	req, err := createReq(`{"name":"orders","starvationAvoidanceEnabled":true}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := entity.QueueConfig{Org: "org1", Name: "orders", Settings: req.ParseQueueSettings}
+	if !cfg.Spec().StarvationAvoidanceEnabled {
+		t.Fatal("the flag did not reach the spec sent to nodes")
+	}
+}

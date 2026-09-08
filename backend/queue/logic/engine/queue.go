@@ -14,8 +14,12 @@ type Config struct {
 	DefaultTTL          time.Duration
 	StarvationThreshold time.Duration
 	StarvationReserve   float64
-	MaxDepth            int64
-	Distributed         bool
+	// StarvationAvoidanceEnabled turns the reserve on. Off, delivery is strictly
+	// by priority and then by Seq; on, a share of deliveries goes to whatever has
+	// waited past the threshold instead.
+	StarvationAvoidanceEnabled bool
+	MaxDepth                   int64
+	Distributed                bool
 	// HasDeadLetter says whether failures have anywhere to go.
 	HasDeadLetter bool
 }
@@ -319,7 +323,7 @@ func (q *Queue) Sweep() SweepResult {
 
 func (q *Queue) Stats() Stats {
 	now := q.clock.Now()
-	var total Stats
+	total := Stats{TopReady: -1}
 
 	q.slotsMu.RLock()
 	slots := make([]*slot, 0, len(q.slots))
@@ -346,6 +350,9 @@ func (q *Queue) Stats() Stats {
 		total.DeadLettered += st.DeadLettered
 		if st.OldestAge > total.OldestAge {
 			total.OldestAge = st.OldestAge // max across slots, never a sum
+		}
+		if st.TopReady > total.TopReady {
+			total.TopReady = st.TopReady
 		}
 	}
 	total.Escapes = q.escapes.Load()

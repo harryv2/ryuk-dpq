@@ -302,17 +302,24 @@ func (s *slot) stats(now time.Time) Stats {
 		Expired:      s.st.expired,
 		Requeued:     s.st.requeued,
 		DeadLettered: s.st.deadLettered,
+		TopReady:     -1,
 	}
-	for w := 0; w < 2; w++ {
-		word := s.bandMask[w]
-		for word != 0 {
-			bit := bits.TrailingZeros64(word)
-			word &^= 1 << uint(bit)
-			if m, ok := s.headMessage(Priority(w*64 + bit)); ok {
-				if age := now.Sub(m.EnqueuedAt); age > st.OldestAge {
-					st.OldestAge = age
-				}
-			}
+	// The same superset the dispatcher picks a slot with, so a node is ranked on
+	// exactly what it would serve.
+	if p, ok := s.highestBand(); ok {
+		st.TopReady = int16(p)
+	}
+	// Every group, not every band head: a redelivered group goes to the back of
+	// its band, so a head scan misses exactly the messages that have waited
+	// longest. Within a group the front is the oldest, so one probe each covers
+	// the whole queue.
+	for _, g := range s.groups {
+		m, ok := g.msgs.front()
+		if !ok || m.expired(now) {
+			continue
+		}
+		if age := now.Sub(m.EnqueuedAt); age > st.OldestAge {
+			st.OldestAge = age
 		}
 	}
 	if st.OldestAge < 0 {

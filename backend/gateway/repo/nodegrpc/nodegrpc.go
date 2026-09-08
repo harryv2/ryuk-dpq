@@ -95,15 +95,16 @@ func fromStatus(err error) error {
 func specTo(s entity.QueueSpec) *pb.QueueSpec {
 	return &pb.QueueSpec{
 		Org: s.Org, Name: s.Name,
-		VisibilityTimeoutNs:   int64(s.VisibilityTimeout),
-		MaxRetries:            s.MaxRetries,
-		DefaultTtlNs:          int64(s.DefaultTTL),
-		StarvationThresholdNs: int64(s.StarvationThreshold),
-		StarvationReserve:     s.StarvationReserve,
-		MaxDepth:              s.MaxDepth,
-		Distributed:           s.Distributed,
-		HasDeadLetter:         s.HasDeadLetter,
-		Generation:            s.Generation,
+		VisibilityTimeoutNs:        int64(s.VisibilityTimeout),
+		MaxRetries:                 s.MaxRetries,
+		DefaultTtlNs:               int64(s.DefaultTTL),
+		StarvationThresholdNs:      int64(s.StarvationThreshold),
+		StarvationReserve:          s.StarvationReserve,
+		StarvationAvoidanceEnabled: s.StarvationAvoidanceEnabled,
+		MaxDepth:                   s.MaxDepth,
+		Distributed:                s.Distributed,
+		HasDeadLetter:              s.HasDeadLetter,
+		Generation:                 s.Generation,
 	}
 }
 
@@ -112,6 +113,7 @@ func statsFrom(p *pb.QueueStats) entity.NodeStats {
 		Org: p.Org, Name: p.Name,
 		InFlight: p.InFlight, Delayed: p.Delayed,
 		OldestAge:    time.Duration(p.OldestAgeNs),
+		TopReady:     int16(p.TopReady),
 		Enqueued:     p.Enqueued,
 		Acked:        p.Acked,
 		Expired:      p.Expired,

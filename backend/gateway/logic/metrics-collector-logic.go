@@ -97,6 +97,9 @@ func addStats(into, s entity.NodeStats) entity.NodeStats {
 	if s.OldestAge > into.OldestAge {
 		into.OldestAge = s.OldestAge
 	}
+	if s.TopReady > into.TopReady {
+		into.TopReady = s.TopReady
+	}
 	return into
 }
 

@@ -54,6 +54,7 @@ func (l *GatewayLogic) withOwner(
 func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 	type owner struct {
 		addr  string
+		top   int16
 		score int64
 	}
 	seen := map[string]bool{}
@@ -68,13 +69,20 @@ func (l *GatewayLogic) rankedOwners(cfg entity.QueueConfig) []string {
 		if !ok {
 			continue
 		}
-		score := int64(0)
+		o := owner{addr: m.Addr, top: -1}
 		if st, ok := readCache[entity.NodeStats](l, nodeStatsCacheKey(cfg.Org, cfg.Name, id)); ok {
-			score = st.Ready[2]*1000 + st.Ready[1]*100 + st.Ready[0]
+			o.top, o.score = st.TopReady, st.Ready[2]*1000+st.Ready[1]*100+st.Ready[0]
 		}
-		owners = append(owners, owner{addr: m.Addr, score: score})
+		owners = append(owners, o)
 	}
-	sort.Slice(owners, func(i, j int) bool { return owners[i].score > owners[j].score })
+	// Ready is bucketed, so on depth alone a node holding one message at 100
+	// ranks below one holding forty at 67. Depth only breaks the tie.
+	sort.Slice(owners, func(i, j int) bool {
+		if owners[i].top != owners[j].top {
+			return owners[i].top > owners[j].top
+		}
+		return owners[i].score > owners[j].score
+	})
 
 	out := make([]string, 0, len(owners))
 	for _, o := range owners {

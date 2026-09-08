@@ -13,10 +13,12 @@ type CreateQueueRequest struct {
 	DefaultTTL          string  `json:"defaultTtl,omitempty"`
 	StarvationThreshold string  `json:"starvationThreshold,omitempty"`
 	StarvationReserve   float64 `json:"starvationReserve,omitempty"`
-	MaxDepth            int64   `json:"maxDepth,omitempty"`
-	DeadLetterQueue     string  `json:"deadLetterQueue,omitempty"`
-	Distributed         bool    `json:"distributed,omitempty"`
-	PlacementWidth      int     `json:"placementWidth,omitempty"`
+	// A pointer so absent (leave it off) differs from an explicit false.
+	StarvationAvoidanceEnabled *bool  `json:"starvationAvoidanceEnabled,omitempty"`
+	MaxDepth                   int64  `json:"maxDepth,omitempty"`
+	DeadLetterQueue            string `json:"deadLetterQueue,omitempty"`
+	Distributed                bool   `json:"distributed,omitempty"`
+	PlacementWidth             int    `json:"placementWidth,omitempty"`
 
 	// The fields above, parsed and defaulted by the controller. Everything
 	// downstream reads this and never the raw strings.

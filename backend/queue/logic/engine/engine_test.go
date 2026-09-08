@@ -316,6 +316,7 @@ func TestStarvationReserve(t *testing.T) {
 	q, clk := newTestQueue(t, func(c *Config) {
 		c.StarvationThreshold = 10 * time.Second
 		c.StarvationReserve = 0.5 // every second delivery
+		c.StarvationAvoidanceEnabled = true
 	})
 
 	low := enq(t, q, Low, "")
@@ -343,6 +344,7 @@ func TestNoStarvationEscapeWhenNothingIsStuck(t *testing.T) {
 	q, _ := newTestQueue(t, func(c *Config) {
 		c.StarvationThreshold = time.Hour
 		c.StarvationReserve = 0.5
+		c.StarvationAvoidanceEnabled = true
 	})
 	enq(t, q, Low, "")
 	for i := 0; i < 5; i++ {
@@ -406,6 +408,31 @@ func TestStatsCounts(t *testing.T) {
 	_ = q.Ack(r)
 	if s = q.Stats(); s.InFlight != 0 || s.Acked != 1 {
 		t.Fatalf("after ack: %+v", s)
+	}
+}
+
+func TestStatsReportsTopReadyPriority(t *testing.T) {
+	q, _ := newTestQueue(t, func(c *Config) { c.StarvationReserve = 0 })
+	if s := q.Stats(); s.TopReady != -1 {
+		t.Fatalf("TopReady on an empty queue = %d, want -1", s.TopReady)
+	}
+
+	enq(t, q, 67, "")
+	enq(t, q, 100, "")
+	enq(t, q, 12, "")
+
+	s := q.Stats()
+	if s.TopReady != 100 {
+		t.Fatalf("TopReady = %d, want 100", s.TopReady)
+	}
+	// 67 and 100 land in the same bucket, which is why TopReady has to exist.
+	if s.Ready[2] != 2 {
+		t.Fatalf("Ready[2] = %d, want 2", s.Ready[2])
+	}
+
+	mustDequeue(t, q)
+	if s := q.Stats(); s.TopReady != 67 {
+		t.Fatalf("TopReady after taking the top message = %d, want 67", s.TopReady)
 	}
 }
 

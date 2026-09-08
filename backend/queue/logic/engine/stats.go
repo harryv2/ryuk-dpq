@@ -21,6 +21,9 @@ type Stats struct {
 	Delayed   int64
 	Bytes     int64
 	OldestAge time.Duration
+	// -1 when nothing is ready. Ready is only bucketed, so this is what lets the
+	// gateway rank nodes by the priority they actually hold.
+	TopReady int16
 
 	Enqueued     uint64
 	Acked        uint64

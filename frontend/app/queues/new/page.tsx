@@ -18,6 +18,7 @@ export default function NewQueue() {
     defaultTtl: "1h",
     starvationThreshold: "5m",
     starvationReserve: 0.2,
+    starvationAvoidanceEnabled: false,
     deadLetterQueue: "",
     distributed: false,
     placementWidth: 6,
@@ -119,13 +120,33 @@ export default function NewQueue() {
             <input value={f.defaultTtl} onChange={(e) => set("defaultTtl", e.target.value)} />
           </label>
           <label>
+            <span>Starvation avoidance</span>
+            <select
+              value={String(f.starvationAvoidanceEnabled)}
+              onChange={(e) => set("starvationAvoidanceEnabled", e.target.value === "true")}
+            >
+              <option value="false">Off — strict priority, then FIFO</option>
+              <option value="true">On — reserve a share for work that has waited</option>
+            </select>
+            <p className="field-hint">
+              {f.starvationAvoidanceEnabled
+                ? "A share of deliveries goes to the longest-waiting message in a lower band. Messages of equal priority are still FIFO."
+                : "Highest priority first, oldest first within a priority. A low-priority message waits as long as higher-priority work keeps arriving."}
+            </p>
+          </label>
+          <label>
             <span>Starvation threshold</span>
-            <input value={f.starvationThreshold} onChange={(e) => set("starvationThreshold", e.target.value)} />
+            <input
+              value={f.starvationThreshold}
+              disabled={!f.starvationAvoidanceEnabled}
+              onChange={(e) => set("starvationThreshold", e.target.value)}
+            />
           </label>
           <label>
             <span>Starvation reserve</span>
             <input
-              type="number" step="0.05" min={0} max={0.95} value={f.starvationReserve}
+              type="number" step="0.05" min={0.05} max={0.95} value={f.starvationReserve}
+              disabled={!f.starvationAvoidanceEnabled}
               onChange={(e) => set("starvationReserve", Number(e.target.value))}
             />
           </label>

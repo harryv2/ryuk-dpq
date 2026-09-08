@@ -80,6 +80,9 @@ func settingsFrom(req entity.CreateQueueRequest) (entity.QueueSettings, error) {
 		DeadLetterQueue:   req.DeadLetterQueue,
 		PlacementWidth:    req.PlacementWidth,
 	}
+	if req.StarvationAvoidanceEnabled != nil {
+		s.StarvationAvoidanceEnabled = *req.StarvationAvoidanceEnabled
+	}
 	if s.VisibilityTimeout, err = optDuration("visibilityTimeout", req.VisibilityTimeout); err != nil {
 		return s, err
 	}

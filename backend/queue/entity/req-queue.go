@@ -9,17 +9,18 @@ import (
 // QueueSpec is everything a node needs to run a queue. The gateway sends it
 // with each request so a node can materialise a queue it has not seen.
 type QueueSpec struct {
-	Org                 string        `json:"org"`
-	Name                string        `json:"name"`
-	VisibilityTimeout   time.Duration `json:"visibilityTimeout"`
-	MaxRetries          uint32        `json:"maxRetries"`
-	DefaultTTL          time.Duration `json:"defaultTtl"`
-	StarvationThreshold time.Duration `json:"starvationThreshold"`
-	StarvationReserve   float64       `json:"starvationReserve"`
-	MaxDepth            int64         `json:"maxDepth"`
-	Distributed         bool          `json:"distributed"`
-	HasDeadLetter       bool          `json:"hasDeadLetter"`
-	Generation          uint64        `json:"generation"`
+	Org                        string        `json:"org"`
+	Name                       string        `json:"name"`
+	VisibilityTimeout          time.Duration `json:"visibilityTimeout"`
+	MaxRetries                 uint32        `json:"maxRetries"`
+	DefaultTTL                 time.Duration `json:"defaultTtl"`
+	StarvationThreshold        time.Duration `json:"starvationThreshold"`
+	StarvationReserve          float64       `json:"starvationReserve"`
+	StarvationAvoidanceEnabled bool          `json:"starvationAvoidanceEnabled"`
+	MaxDepth                   int64         `json:"maxDepth"`
+	Distributed                bool          `json:"distributed"`
+	HasDeadLetter              bool          `json:"hasDeadLetter"`
+	Generation                 uint64        `json:"generation"`
 }
 
 func (s QueueSpec) Key() engine.QueueKey {
@@ -28,15 +29,16 @@ func (s QueueSpec) Key() engine.QueueKey {
 
 func (s QueueSpec) EngineConfig() engine.Config {
 	return engine.Config{
-		Key:                 s.Key(),
-		VisibilityTimeout:   s.VisibilityTimeout,
-		MaxRetries:          s.MaxRetries,
-		DefaultTTL:          s.DefaultTTL,
-		StarvationThreshold: s.StarvationThreshold,
-		StarvationReserve:   s.StarvationReserve,
-		MaxDepth:            s.MaxDepth,
-		Distributed:         s.Distributed,
-		HasDeadLetter:       s.HasDeadLetter,
+		Key:                        s.Key(),
+		VisibilityTimeout:          s.VisibilityTimeout,
+		MaxRetries:                 s.MaxRetries,
+		DefaultTTL:                 s.DefaultTTL,
+		StarvationThreshold:        s.StarvationThreshold,
+		StarvationReserve:          s.StarvationReserve,
+		StarvationAvoidanceEnabled: s.StarvationAvoidanceEnabled,
+		MaxDepth:                   s.MaxDepth,
+		Distributed:                s.Distributed,
+		HasDeadLetter:              s.HasDeadLetter,
 	}
 }
 
@@ -94,6 +96,7 @@ type QueueStats struct {
 	InFlight     int64         `json:"inFlight"`
 	Delayed      int64         `json:"delayed"`
 	OldestAge    time.Duration `json:"oldestAge"`
+	TopReady     int16         `json:"topReady"`
 	Enqueued     uint64        `json:"enqueued"`
 	Acked        uint64        `json:"acked"`
 	Expired      uint64        `json:"expired"`

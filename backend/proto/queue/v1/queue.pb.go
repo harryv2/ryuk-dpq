@@ -38,8 +38,11 @@ type QueueSpec struct {
 	// Whether failures have anywhere to go. Without a dead-letter queue a message
 	// that runs out of retries keeps being redelivered rather than dropped.
 	HasDeadLetter bool `protobuf:"varint,11,opt,name=has_dead_letter,json=hasDeadLetter,proto3" json:"has_dead_letter,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Off, delivery is strictly by priority then by seq. On, starvation_reserve
+	// of deliveries go to work waiting past starvation_threshold_ns.
+	StarvationAvoidanceEnabled bool `protobuf:"varint,12,opt,name=starvation_avoidance_enabled,json=starvationAvoidanceEnabled,proto3" json:"starvation_avoidance_enabled,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *QueueSpec) Reset() {
@@ -145,6 +148,13 @@ func (x *QueueSpec) GetGeneration() uint64 {
 func (x *QueueSpec) GetHasDeadLetter() bool {
 	if x != nil {
 		return x.HasDeadLetter
+	}
+	return false
+}
+
+func (x *QueueSpec) GetStarvationAvoidanceEnabled() bool {
+	if x != nil {
+		return x.StarvationAvoidanceEnabled
 	}
 	return false
 }
@@ -898,16 +908,19 @@ type QueueStats struct {
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// ready is bucketed low, medium, high -- the granularity metrics report at.
-	Ready         []int64 `protobuf:"varint,3,rep,packed,name=ready,proto3" json:"ready,omitempty"`
-	InFlight      int64   `protobuf:"varint,4,opt,name=in_flight,json=inFlight,proto3" json:"in_flight,omitempty"`
-	Delayed       int64   `protobuf:"varint,5,opt,name=delayed,proto3" json:"delayed,omitempty"`
-	OldestAgeNs   int64   `protobuf:"varint,6,opt,name=oldest_age_ns,json=oldestAgeNs,proto3" json:"oldest_age_ns,omitempty"`
-	Enqueued      uint64  `protobuf:"varint,7,opt,name=enqueued,proto3" json:"enqueued,omitempty"`
-	Acked         uint64  `protobuf:"varint,8,opt,name=acked,proto3" json:"acked,omitempty"`
-	Expired       uint64  `protobuf:"varint,9,opt,name=expired,proto3" json:"expired,omitempty"`
-	Requeued      uint64  `protobuf:"varint,10,opt,name=requeued,proto3" json:"requeued,omitempty"`
-	DeadLettered  uint64  `protobuf:"varint,11,opt,name=dead_lettered,json=deadLettered,proto3" json:"dead_lettered,omitempty"`
-	Escapes       uint64  `protobuf:"varint,12,opt,name=escapes,proto3" json:"escapes,omitempty"`
+	Ready        []int64 `protobuf:"varint,3,rep,packed,name=ready,proto3" json:"ready,omitempty"`
+	InFlight     int64   `protobuf:"varint,4,opt,name=in_flight,json=inFlight,proto3" json:"in_flight,omitempty"`
+	Delayed      int64   `protobuf:"varint,5,opt,name=delayed,proto3" json:"delayed,omitempty"`
+	OldestAgeNs  int64   `protobuf:"varint,6,opt,name=oldest_age_ns,json=oldestAgeNs,proto3" json:"oldest_age_ns,omitempty"`
+	Enqueued     uint64  `protobuf:"varint,7,opt,name=enqueued,proto3" json:"enqueued,omitempty"`
+	Acked        uint64  `protobuf:"varint,8,opt,name=acked,proto3" json:"acked,omitempty"`
+	Expired      uint64  `protobuf:"varint,9,opt,name=expired,proto3" json:"expired,omitempty"`
+	Requeued     uint64  `protobuf:"varint,10,opt,name=requeued,proto3" json:"requeued,omitempty"`
+	DeadLettered uint64  `protobuf:"varint,11,opt,name=dead_lettered,json=deadLettered,proto3" json:"dead_lettered,omitempty"`
+	Escapes      uint64  `protobuf:"varint,12,opt,name=escapes,proto3" json:"escapes,omitempty"`
+	// top_ready is the highest priority with a message ready, -1 when there is
+	// none. ready is bucketed, so this is what lets a caller rank nodes.
+	TopReady      int32 `protobuf:"varint,13,opt,name=top_ready,json=topReady,proto3" json:"top_ready,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1022,6 +1035,13 @@ func (x *QueueStats) GetDeadLettered() uint64 {
 func (x *QueueStats) GetEscapes() uint64 {
 	if x != nil {
 		return x.Escapes
+	}
+	return 0
+}
+
+func (x *QueueStats) GetTopReady() int32 {
+	if x != nil {
+		return x.TopReady
 	}
 	return 0
 }
@@ -1629,7 +1649,7 @@ var File_queue_v1_queue_proto protoreflect.FileDescriptor
 
 const file_queue_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x14queue/v1/queue.proto\x12\rryuk.queue.v1\"\x9a\x03\n" +
+	"\x14queue/v1/queue.proto\x12\rryuk.queue.v1\"\xdc\x03\n" +
 	"\tQueueSpec\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x122\n" +
@@ -1645,7 +1665,8 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"generation\x18\n" +
 	" \x01(\x04R\n" +
 	"generation\x12&\n" +
-	"\x0fhas_dead_letter\x18\v \x01(\bR\rhasDeadLetter\"|\n" +
+	"\x0fhas_dead_letter\x18\v \x01(\bR\rhasDeadLetter\x12@\n" +
+	"\x1cstarvation_avoidance_enabled\x18\f \x01(\bR\x1astarvationAvoidanceEnabled\"|\n" +
 	"\n" +
 	"DeadLetter\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
@@ -1698,7 +1719,7 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\x04spec\x18\x01 \x01(\v2\x18.ryuk.queue.v1.QueueSpecR\x04spec\"S\n" +
 	"\rFreezeRequest\x12,\n" +
 	"\x04spec\x18\x01 \x01(\v2\x18.ryuk.queue.v1.QueueSpecR\x04spec\x12\x14\n" +
-	"\x05slots\x18\x02 \x03(\rR\x05slots\"\xca\x02\n" +
+	"\x05slots\x18\x02 \x03(\rR\x05slots\"\xe7\x02\n" +
 	"\n" +
 	"QueueStats\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
@@ -1713,7 +1734,8 @@ const file_queue_v1_queue_proto_rawDesc = "" +
 	"\brequeued\x18\n" +
 	" \x01(\x04R\brequeued\x12#\n" +
 	"\rdead_lettered\x18\v \x01(\x04R\fdeadLettered\x12\x18\n" +
-	"\aescapes\x18\f \x01(\x04R\aescapes\"^\n" +
+	"\aescapes\x18\f \x01(\x04R\aescapes\x12\x1b\n" +
+	"\ttop_ready\x18\r \x01(\x05R\btopReady\"^\n" +
 	"\x10StatsAllResponse\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x121\n" +
 	"\x06queues\x18\x02 \x03(\v2\x19.ryuk.queue.v1.QueueStatsR\x06queues\"\xab\x02\n" +

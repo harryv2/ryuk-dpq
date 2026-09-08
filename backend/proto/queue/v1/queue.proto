@@ -20,6 +20,9 @@ message QueueSpec {
   // Whether failures have anywhere to go. Without a dead-letter queue a message
   // that runs out of retries keeps being redelivered rather than dropped.
   bool has_dead_letter = 11;
+  // Off, delivery is strictly by priority then by seq. On, starvation_reserve
+  // of deliveries go to work waiting past starvation_threshold_ns.
+  bool starvation_avoidance_enabled = 12;
 }
 
 message DeadLetter {
@@ -112,6 +115,9 @@ message QueueStats {
   uint64 requeued = 10;
   uint64 dead_lettered = 11;
   uint64 escapes = 12;
+  // top_ready is the highest priority with a message ready, -1 when there is
+  // none. ready is bucketed, so this is what lets a caller rank nodes.
+  int32 top_ready = 13;
 }
 
 message StatsAllResponse {

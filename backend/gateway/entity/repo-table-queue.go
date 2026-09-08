@@ -22,8 +22,12 @@ type QueueSettings struct {
 	DefaultTTL          time.Duration `json:"defaultTtl"`
 	StarvationThreshold time.Duration `json:"starvationThreshold"`
 	StarvationReserve   float64       `json:"starvationReserve"`
-	MaxDepth            int64         `json:"maxDepth"`
-	DeadLetterQueue     string        `json:"deadLetterQueue,omitempty"`
+	// Off by default: delivery is then strictly by priority, then FIFO. On, a
+	// StarvationReserve share of deliveries goes to work that has waited past
+	// StarvationThreshold in a band below the one being served.
+	StarvationAvoidanceEnabled bool   `json:"starvationAvoidanceEnabled"`
+	MaxDepth                   int64  `json:"maxDepth"`
+	DeadLetterQueue            string `json:"deadLetterQueue,omitempty"`
 	// Fixed at creation: changing it re-derives the candidate set and would
 	// move most of the queue.
 	PlacementWidth int `json:"placementWidth,omitempty"`

@@ -39,6 +39,7 @@ func toStats(k engine.QueueKey, s engine.Stats) entity.QueueStats {
 		InFlight:     s.InFlight,
 		Delayed:      s.Delayed,
 		OldestAge:    s.OldestAge,
+		TopReady:     s.TopReady,
 		Enqueued:     s.Enqueued,
 		Acked:        s.Acked,
 		Expired:      s.Expired,

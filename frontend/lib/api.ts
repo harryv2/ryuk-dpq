@@ -21,6 +21,7 @@ export type QueueSettings = {
   defaultTtl: number;
   starvationThreshold: number;
   starvationReserve: number;
+  starvationAvoidanceEnabled: boolean;
   maxDepth: number;
   deadLetterQueue?: string;
   placementWidth?: number;

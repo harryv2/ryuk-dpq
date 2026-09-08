@@ -73,6 +73,17 @@ Anything both services must agree on goes in `backend/slotting` or
 - **`slot.take` returns a copy of the message**, not the live pointer. The slot
   keeps mutating the original after the lock is released.
 - **`group.locked` is the ordering guarantee.** One message in flight per group.
+- **Priority is inert inside a group.** A group's messages are strict FIFO; a
+  group's *band* is the priority of its head message. So a HIGH message sent
+  after a LOW one in the same group waits behind it. Ordering and priority
+  contradict each other for two messages of one group, and ordering wins —
+  that is what `groupId` is asking for. Ungrouped messages are each their own
+  group, so they are ordered by priority, then by `Seq`.
+- **Starvation avoidance is off unless the queue asks for it.** With
+  `StarvationAvoidanceEnabled` false, delivery is strictly by band then by
+  `Seq`. On, `takeStarved` may serve a band **below** the one `takeUrgent`
+  would pick. It must never take from the same band: `takeUrgent` already
+  serves that band oldest-first across slots, so taking there only breaks FIFO.
 - **`group.version` and `lease.epoch` are lazy deletion.** Stale entries stay in
   heaps and deques and are skipped when they surface. Do not "tidy" them.
 - **`AppendEnqueue` flushes before the message is visible.** The other journal
@@ -84,6 +95,12 @@ Anything both services must agree on goes in `backend/slotting` or
   redelivered. `engine.Config.HasDeadLetter` is what switches that.
 - **Carry a slot id, do not recompute it.** Deriving it from the group key gives
   the wrong answer for an ungrouped message.
+- **`retire` ends in `unlock`, on every branch.** A message that expires or
+  dead-letters leaves its group behind. Dropping the group instead of re-listing
+  it leaves the siblings in no band at all, and nothing dispatches them.
+- **`OldestAge` scans group fronts, not band heads.** A redelivered group goes
+  to the back of its band, so a head scan misses exactly the messages that have
+  waited longest — which is the whole point of the metric.
 
 ## Style
 

@@ -40,6 +40,7 @@ type NodeStats struct {
 	InFlight     int64         `json:"inFlight"`
 	Delayed      int64         `json:"delayed"`
 	OldestAge    time.Duration `json:"oldestAge"`
+	TopReady     int16         `json:"topReady"`
 	Enqueued     uint64        `json:"enqueued"`
 	Acked        uint64        `json:"acked"`
 	Expired      uint64        `json:"expired"`
@@ -51,32 +52,34 @@ type NodeStats struct {
 // QueueSpec travels with every request so a node can materialise a queue it has
 // not seen without a separate create call.
 type QueueSpec struct {
-	Org                 string        `json:"org"`
-	Name                string        `json:"name"`
-	VisibilityTimeout   time.Duration `json:"visibilityTimeout"`
-	MaxRetries          uint32        `json:"maxRetries"`
-	DefaultTTL          time.Duration `json:"defaultTtl"`
-	StarvationThreshold time.Duration `json:"starvationThreshold"`
-	StarvationReserve   float64       `json:"starvationReserve"`
-	MaxDepth            int64         `json:"maxDepth"`
-	Distributed         bool          `json:"distributed"`
-	HasDeadLetter       bool          `json:"hasDeadLetter"`
-	Generation          uint64        `json:"generation"`
+	Org                        string        `json:"org"`
+	Name                       string        `json:"name"`
+	VisibilityTimeout          time.Duration `json:"visibilityTimeout"`
+	MaxRetries                 uint32        `json:"maxRetries"`
+	DefaultTTL                 time.Duration `json:"defaultTtl"`
+	StarvationThreshold        time.Duration `json:"starvationThreshold"`
+	StarvationReserve          float64       `json:"starvationReserve"`
+	StarvationAvoidanceEnabled bool          `json:"starvationAvoidanceEnabled"`
+	MaxDepth                   int64         `json:"maxDepth"`
+	Distributed                bool          `json:"distributed"`
+	HasDeadLetter              bool          `json:"hasDeadLetter"`
+	Generation                 uint64        `json:"generation"`
 }
 
 func (c QueueConfig) Spec() QueueSpec {
 	return QueueSpec{
-		Org:                 c.Org,
-		Name:                c.Name,
-		VisibilityTimeout:   c.Settings.VisibilityTimeout,
-		MaxRetries:          c.Settings.MaxRetries,
-		DefaultTTL:          c.Settings.DefaultTTL,
-		StarvationThreshold: c.Settings.StarvationThreshold,
-		StarvationReserve:   c.Settings.StarvationReserve,
-		MaxDepth:            c.Settings.MaxDepth,
-		Distributed:         c.Distributed,
-		HasDeadLetter:       c.Settings.DeadLetterQueue != "",
-		Generation:          c.Generation,
+		Org:                        c.Org,
+		Name:                       c.Name,
+		VisibilityTimeout:          c.Settings.VisibilityTimeout,
+		MaxRetries:                 c.Settings.MaxRetries,
+		DefaultTTL:                 c.Settings.DefaultTTL,
+		StarvationThreshold:        c.Settings.StarvationThreshold,
+		StarvationReserve:          c.Settings.StarvationReserve,
+		StarvationAvoidanceEnabled: c.Settings.StarvationAvoidanceEnabled,
+		MaxDepth:                   c.Settings.MaxDepth,
+		Distributed:                c.Distributed,
+		HasDeadLetter:              c.Settings.DeadLetterQueue != "",
+		Generation:                 c.Generation,
 	}
 }
 

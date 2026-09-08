@@ -747,6 +747,7 @@ func TestStarvationReserveMovesLowPriorityUnderLoad(t *testing.T) {
 		c.VisibilityTimeout = time.Hour
 		c.StarvationThreshold = 10 * time.Millisecond
 		c.StarvationReserve = 0.25
+		c.StarvationAvoidanceEnabled = true
 	})
 
 	// A backlog of low-priority work that is already old enough to qualify.

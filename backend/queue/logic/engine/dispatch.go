@@ -37,14 +37,35 @@ func (q *Queue) afterTake(r Receipt, m *Message) {
 // reserveTick decides whether this delivery belongs to the share set aside for
 // work that has waited too long.
 func (q *Queue) reserveTick(n uint64) bool {
-	if q.cfg().StarvationReserve <= 0 {
+	c := q.cfg()
+	if !c.StarvationAvoidanceEnabled || c.StarvationReserve <= 0 {
 		return false
 	}
-	every := uint64(1.0 / q.cfg().StarvationReserve)
+	every := uint64(1.0 / c.StarvationReserve)
 	if every == 0 {
 		return true
 	}
 	return n%every == 0
+}
+
+// bestBand is the highest priority any slot is offering, read from the same
+// atomics takeUrgent uses.
+func (q *Queue) bestBand() (Priority, bool) {
+	var best Priority
+	found := false
+	for _, s := range q.localSlots() {
+		if s.frozen.Load() {
+			continue
+		}
+		h := s.hint.Load()
+		if h == 0 {
+			continue
+		}
+		if b := Priority(h - 1); !found || b > best {
+			best, found = b, true
+		}
+	}
+	return best, found
 }
 
 // takeUrgent reads two atomics per slot, then locks only the winner.
@@ -90,6 +111,13 @@ func (q *Queue) takeStarved(now time.Time) (*Message, Receipt, bool) {
 	if len(slots) == 0 {
 		return nil, Receipt{}, false
 	}
+	// Only a band below the one takeUrgent would serve is being starved. At or
+	// above it there is no inversion to correct, and taking here would break the
+	// Seq ordering takeUrgent gives messages of equal priority.
+	top, ok := q.bestBand()
+	if !ok {
+		return nil, Receipt{}, false
+	}
 	cutoff := now.Add(-q.cfg().StarvationThreshold)
 	start := int(q.cursor.Add(1)) % len(slots)
 
@@ -100,7 +128,7 @@ func (q *Queue) takeStarved(now time.Time) (*Message, Receipt, bool) {
 		}
 		s.mu.Lock()
 		p, ok := s.oldestBandBefore(cutoff)
-		if !ok {
+		if !ok || p >= top {
 			s.mu.Unlock()
 			continue
 		}

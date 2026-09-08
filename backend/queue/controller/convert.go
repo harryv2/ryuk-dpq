@@ -13,33 +13,35 @@ func specFrom(p *pb.QueueSpec) entity.QueueSpec {
 		return entity.QueueSpec{}
 	}
 	return entity.QueueSpec{
-		Org:                 p.Org,
-		Name:                p.Name,
-		VisibilityTimeout:   time.Duration(p.VisibilityTimeoutNs),
-		MaxRetries:          p.MaxRetries,
-		DefaultTTL:          time.Duration(p.DefaultTtlNs),
-		StarvationThreshold: time.Duration(p.StarvationThresholdNs),
-		StarvationReserve:   p.StarvationReserve,
-		MaxDepth:            p.MaxDepth,
-		Distributed:         p.Distributed,
-		HasDeadLetter:       p.HasDeadLetter,
-		Generation:          p.Generation,
+		Org:                        p.Org,
+		Name:                       p.Name,
+		VisibilityTimeout:          time.Duration(p.VisibilityTimeoutNs),
+		MaxRetries:                 p.MaxRetries,
+		DefaultTTL:                 time.Duration(p.DefaultTtlNs),
+		StarvationThreshold:        time.Duration(p.StarvationThresholdNs),
+		StarvationReserve:          p.StarvationReserve,
+		StarvationAvoidanceEnabled: p.StarvationAvoidanceEnabled,
+		MaxDepth:                   p.MaxDepth,
+		Distributed:                p.Distributed,
+		HasDeadLetter:              p.HasDeadLetter,
+		Generation:                 p.Generation,
 	}
 }
 
 func specTo(s entity.QueueSpec) *pb.QueueSpec {
 	return &pb.QueueSpec{
-		Org:                   s.Org,
-		Name:                  s.Name,
-		VisibilityTimeoutNs:   int64(s.VisibilityTimeout),
-		MaxRetries:            s.MaxRetries,
-		DefaultTtlNs:          int64(s.DefaultTTL),
-		StarvationThresholdNs: int64(s.StarvationThreshold),
-		StarvationReserve:     s.StarvationReserve,
-		MaxDepth:              s.MaxDepth,
-		Distributed:           s.Distributed,
-		HasDeadLetter:         s.HasDeadLetter,
-		Generation:            s.Generation,
+		Org:                        s.Org,
+		Name:                       s.Name,
+		VisibilityTimeoutNs:        int64(s.VisibilityTimeout),
+		MaxRetries:                 s.MaxRetries,
+		DefaultTtlNs:               int64(s.DefaultTTL),
+		StarvationThresholdNs:      int64(s.StarvationThreshold),
+		StarvationReserve:          s.StarvationReserve,
+		StarvationAvoidanceEnabled: s.StarvationAvoidanceEnabled,
+		MaxDepth:                   s.MaxDepth,
+		Distributed:                s.Distributed,
+		HasDeadLetter:              s.HasDeadLetter,
+		Generation:                 s.Generation,
 	}
 }
 
@@ -51,6 +53,7 @@ func statsTo(s entity.QueueStats) *pb.QueueStats {
 		InFlight:     s.InFlight,
 		Delayed:      s.Delayed,
 		OldestAgeNs:  int64(s.OldestAge),
+		TopReady:     int32(s.TopReady),
 		Enqueued:     s.Enqueued,
 		Acked:        s.Acked,
 		Expired:      s.Expired,

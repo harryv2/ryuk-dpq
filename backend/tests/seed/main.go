@@ -66,6 +66,7 @@ type queueSpec struct {
 	distributed bool
 	width       int
 	dlq         string
+	starvation  bool
 }
 
 // plan decides what each queue looks like.
@@ -78,6 +79,8 @@ func plan(n int, rnd *rand.Rand) []queueSpec {
 			name = fmt.Sprintf("%s-%d", name, i/len(names)+1)
 		}
 		q := queueSpec{name: name}
+		// A few with starvation avoidance on, so both delivery modes are visible.
+		q.starvation = i%4 == 0
 		if i%3 == 0 {
 			q.distributed = true
 			q.width = widths[rnd.Intn(len(widths))]
@@ -126,12 +129,13 @@ func main() {
 		}
 		for _, s := range specs {
 			body := map[string]any{
-				"name":                s.name,
-				"visibilityTimeout":   "45s",
-				"maxRetries":          3,
-				"defaultTtl":          "6h",
-				"starvationThreshold": "5m",
-				"starvationReserve":   0.2,
+				"name":                       s.name,
+				"visibilityTimeout":          "45s",
+				"maxRetries":                 3,
+				"defaultTtl":                 "6h",
+				"starvationAvoidanceEnabled": s.starvation,
+				"starvationThreshold":        "5m",
+				"starvationReserve":          0.2,
 			}
 			if s.distributed {
 				body["distributed"] = true
@@ -218,10 +222,14 @@ func fill(c *client, s queueSpec, rnd *rand.Rand, sent, acked, inflight, dead *a
 }
 
 func kind(s queueSpec) string {
+	k := "single"
 	if s.distributed {
-		return fmt.Sprintf("dist w=%d", s.width)
+		k = fmt.Sprintf("dist w=%d", s.width)
 	}
-	return "single"
+	if s.starvation {
+		k += " +starv"
+	}
+	return k
 }
 
 // priority spreads over the whole scale rather than only the three names, so

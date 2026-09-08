@@ -436,6 +436,7 @@ type Form = {
   defaultTtl: string;
   starvationThreshold: string;
   starvationReserve: number;
+  starvationAvoidanceEnabled: boolean;
   maxDepth: number;
   deadLetterQueue: string;
 };
@@ -447,6 +448,7 @@ function formOf(q: QueueSummary): Form {
     defaultTtl: fmtDur(q.settings.defaultTtl),
     starvationThreshold: fmtDur(q.settings.starvationThreshold),
     starvationReserve: q.settings.starvationReserve,
+    starvationAvoidanceEnabled: q.settings.starvationAvoidanceEnabled ?? false,
     maxDepth: q.settings.maxDepth,
     deadLetterQueue: q.settings.deadLetterQueue ?? "",
   };
@@ -489,6 +491,7 @@ function DetailsPanel({
         defaultTtl: f.defaultTtl || undefined,
         starvationThreshold: f.starvationThreshold || undefined,
         starvationReserve: Number(f.starvationReserve),
+        starvationAvoidanceEnabled: f.starvationAvoidanceEnabled,
         maxDepth: Number(f.maxDepth),
         deadLetterQueue: f.deadLetterQueue || undefined,
       });
@@ -564,13 +567,29 @@ function DetailsPanel({
             <p className="field-hint">Stamped at enqueue. Messages already queued keep the expiry they were given.</p>
           </label>
           <label>
+            <span>Starvation avoidance</span>
+            <select
+              value={String(f.starvationAvoidanceEnabled)}
+              onChange={(e) => set("starvationAvoidanceEnabled", e.target.value === "true")}
+            >
+              <option value="false">Off — strict priority, then FIFO</option>
+              <option value="true">On — reserve a share for work that has waited</option>
+            </select>
+            <p className="field-hint">
+              Takes effect on the next poll. Off, a message of equal priority is
+              never served ahead of an older one.
+            </p>
+          </label>
+          <label>
             <span>Starvation threshold</span>
-            <input value={f.starvationThreshold} onChange={(e) => set("starvationThreshold", e.target.value)} />
+            <input value={f.starvationThreshold} disabled={!f.starvationAvoidanceEnabled}
+              onChange={(e) => set("starvationThreshold", e.target.value)} />
             <p className="field-hint">Takes effect on the next poll, for everything in the queue.</p>
           </label>
           <label>
             <span>Starvation reserve</span>
-            <input type="number" step="0.05" min={0} max={0.95} value={f.starvationReserve}
+            <input type="number" step="0.05" min={0.05} max={0.95} value={f.starvationReserve}
+              disabled={!f.starvationAvoidanceEnabled}
               onChange={(e) => set("starvationReserve", e.target.value)} />
           </label>
           <label>
