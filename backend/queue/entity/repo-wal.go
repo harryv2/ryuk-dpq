@@ -14,7 +14,11 @@ type WALRepo interface {
 	AppendDeadLetterDrained(id string) error
 	ReplayDeadLetters() ([]PendingDeadLetter, error)
 	CompactDeadLetters(pending []PendingDeadLetter) error
-	Compact(slot uint16, msgs []*engine.Message) error
+
+	// Read before the message list Compact is given, so records arriving in
+	// between are carried over rather than lost.
+	Marks() (map[uint16]int64, error)
+	Compact(slot uint16, msgs []*engine.Message, from int64) error
 	Drop(slot uint16) error
 	Close() error
 }

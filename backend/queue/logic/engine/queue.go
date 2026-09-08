@@ -8,9 +8,12 @@ import (
 )
 
 type Config struct {
-	Key                 QueueKey
-	VisibilityTimeout   time.Duration
-	MaxRetries          uint32
+	Key               QueueKey
+	VisibilityTimeout time.Duration
+	MaxRetries        uint32
+	// Tells an explicit 0, meaning dead-letter on the first failure, from a
+	// caller that set nothing.
+	MaxRetriesSet       bool
 	DefaultTTL          time.Duration
 	StarvationThreshold time.Duration
 	StarvationReserve   float64
@@ -28,7 +31,7 @@ func (c *Config) applyDefaults() {
 	if c.VisibilityTimeout <= 0 {
 		c.VisibilityTimeout = 30 * time.Second
 	}
-	if c.MaxRetries == 0 {
+	if !c.MaxRetriesSet && c.MaxRetries == 0 {
 		c.MaxRetries = 3
 	}
 	if c.StarvationReserve <= 0 || c.StarvationReserve > 1 {
@@ -70,6 +73,9 @@ type Queue struct {
 	rr       atomic.Uint64
 	cursor   atomic.Uint32
 	depth    atomic.Int64
+	// Enqueues that have claimed room but not landed. The cap has to see these
+	// as well as depth, or producers racing between the two both get in.
+	reserved atomic.Int64
 	escapes  atomic.Uint64
 	frozen   atomic.Bool
 }
@@ -191,7 +197,12 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	if !o.Priority.Valid() {
 		return nil, ErrBadPriority
 	}
-	if q.cfg().MaxDepth > 0 && q.depth.Load() >= q.cfg().MaxDepth {
+	// Claimed before the message is built, not counted after it lands: the
+	// claim numbers this caller among the enqueues in flight, so exactly the
+	// ones that fit get through. Every path out from here gives it back.
+	pending := q.reserved.Add(1)
+	if max := q.cfg().MaxDepth; max > 0 && q.depth.Load()+pending > max {
+		q.reserved.Add(-1)
 		return nil, ErrQueueFull
 	}
 
@@ -219,6 +230,7 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	if s.frozen.Load() {
 		// Being handed to another node. The caller re-reads placement and
 		// retries, so the message lands wherever the slot ends up.
+		q.reserved.Add(-1)
 		return nil, ErrFrozen
 	}
 	s.mu.Lock()
@@ -229,12 +241,15 @@ func (q *Queue) EnqueueToSlot(slotID uint16, o EnqueueOptions) (*Message, error)
 	// flush happens off the lock.
 	if err := q.journal.AppendEnqueue(slotID, m); err != nil {
 		s.mu.Unlock()
+		q.reserved.Add(-1)
 		return nil, err
 	}
 	s.enqueue(m, now)
 	s.mu.Unlock()
 
+	// In this order, so the message is never missing from both at once.
 	q.depth.Add(1)
+	q.reserved.Add(-1)
 	return m, nil
 }
 
@@ -287,7 +302,7 @@ type SweepResult struct {
 func (q *Queue) Sweep() SweepResult {
 	now := q.clock.Now()
 	var res SweepResult
-	var depth int64
+	var removed int64
 
 	q.slotsMu.RLock()
 	slots := make([]*slot, 0, len(q.slots))
@@ -301,23 +316,27 @@ func (q *Queue) Sweep() SweepResult {
 			continue // its messages are being moved; timers would mutate them
 		}
 		s.mu.Lock()
+		// Expiry and dead-lettering are the only ways a message leaves without
+		// its remover adjusting depth, so the sweep counts its own removals.
+		gone := s.st.expired + s.st.deadLettered
 		res.Released += s.releaseDelayed(now)
 		dead, requeued := s.sweepLeases(now, q.cfg().MaxRetries, q.cfg().HasDeadLetter)
 		res.Redelivered += requeued
 		res.Expired += s.sweepTTL(now)
-		st := s.stats(now)
+		removed += int64(s.st.expired + s.st.deadLettered - gone)
 		s.mu.Unlock()
 
 		for _, m := range dead {
 			res.DeadLettered = append(res.DeadLettered, DeadLetter{Slot: s.id, Msg: m})
 		}
-		depth += st.ReadyTotal() + st.InFlight + st.Delayed
 	}
 
 	for _, d := range res.DeadLettered {
 		q.journal.AppendTerminal(d.Slot, d.Msg.ID, TerminalDeadLettered)
 	}
-	q.depth.Store(depth)
+	// A delta, not a recount: a total read while producers run is stale by the
+	// time it is written back, and either erases their enqueues or doubles them.
+	q.depth.Add(-removed)
 	return res
 }
 
@@ -430,7 +449,7 @@ func (q *Queue) DropSlots(ids []uint16) int {
 		s.mu.Unlock()
 		s.frozen.Store(false) // empty now; it may be handed back later
 	}
-	q.recountDepth()
+	q.depth.Add(-int64(dropped))
 	return dropped
 }
 
@@ -466,24 +485,6 @@ func (q *Queue) HeldSlots() []uint16 {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
-}
-
-func (q *Queue) recountDepth() {
-	var depth int64
-	q.slotsMu.RLock()
-	slots := make([]*slot, 0, len(q.slots))
-	for _, s := range q.slots {
-		slots = append(slots, s)
-	}
-	q.slotsMu.RUnlock()
-	now := q.clock.Now()
-	for _, s := range slots {
-		s.mu.Lock()
-		st := s.stats(now)
-		s.mu.Unlock()
-		depth += st.ReadyTotal() + st.InFlight + st.Delayed
-	}
-	q.depth.Store(depth)
 }
 
 // Absorb merges messages in, inserting by Seq rather than appending so an

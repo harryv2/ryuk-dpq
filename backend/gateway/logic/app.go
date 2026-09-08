@@ -70,7 +70,7 @@ func New(
 		cfg.CacheTTL = 30 * time.Second
 	}
 	if cfg.CollectEvery <= 0 {
-		cfg.CollectEvery = 5 * time.Second
+		cfg.CollectEvery = time.Second
 	}
 	if cfg.BackstopPoll <= 0 {
 		cfg.BackstopPoll = 5 * time.Second

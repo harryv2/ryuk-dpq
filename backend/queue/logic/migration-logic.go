@@ -132,8 +132,8 @@ func (l *QueueLogic) DiscardMove(spec entity.QueueSpec, slots []uint16) error {
 	}
 	n := lq.q.DropSlots(slots)
 	for _, slot := range slots {
-		if err := lq.wal.Compact(slot, nil); err != nil {
-			l.log.Warn("discard: truncate log", "queue", spec.Name, "slot", slot, "err", err)
+		if err := lq.wal.Drop(slot); err != nil {
+			l.log.Warn("discard: remove log", "queue", spec.Name, "slot", slot, "err", err)
 		}
 	}
 	l.log.Info("discarded moved slots", "org", spec.Org, "queue", spec.Name,

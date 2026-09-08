@@ -32,6 +32,7 @@ func (s QueueSpec) EngineConfig() engine.Config {
 		Key:                        s.Key(),
 		VisibilityTimeout:          s.VisibilityTimeout,
 		MaxRetries:                 s.MaxRetries,
+		MaxRetriesSet:              true, // the gateway resolves it before sending
 		DefaultTTL:                 s.DefaultTTL,
 		StarvationThreshold:        s.StarvationThreshold,
 		StarvationReserve:          s.StarvationReserve,

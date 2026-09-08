@@ -98,7 +98,7 @@ func LoadGateway() Gateway {
 		Listen:       str("RYUK_LISTEN", ":8080"),
 		Postgres:     str("RYUK_POSTGRES", "postgres://ryuk:ryuk@localhost:5432/ryuk?sslmode=disable"),
 		Etcd:         list("RYUK_ETCD", []string{"localhost:2379"}),
-		CollectEvery: dur("RYUK_COLLECT_EVERY", 5*time.Second),
+		CollectEvery: dur("RYUK_COLLECT_EVERY", time.Second),
 		Prometheus:   str("RYUK_PROMETHEUS", ""),
 		CacheTTL:     dur("RYUK_CACHE_TTL", 30*time.Second),
 		BackstopPoll: dur("RYUK_BACKSTOP_POLL", 5*time.Second),

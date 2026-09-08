@@ -61,12 +61,19 @@ func (l *QueueLogic) Compact() {
 	l.mu.RUnlock()
 
 	for key, lq := range snapshot {
+		// Before the snapshot: what arrives after the marks is not described by
+		// it, so the rewrite has to carry it over instead of dropping it.
+		marks, err := lq.wal.Marks()
+		if err != nil {
+			l.log.Warn("compact: read marks", "org", key.Org, "queue", key.Name, "err", err)
+			continue
+		}
 		bySlot, err := lq.q.Snapshot()
 		if err != nil {
 			continue
 		}
 		for slot, msgs := range bySlot {
-			if err := lq.wal.Compact(slot, msgs); err != nil {
+			if err := lq.wal.Compact(slot, msgs, marks[slot]); err != nil {
 				l.log.Warn("compact", "org", key.Org, "queue", key.Name, "slot", slot, "err", err)
 			}
 		}

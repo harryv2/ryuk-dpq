@@ -399,3 +399,69 @@ func TestAQueueUsedAsADeadLetterQueueCannotBeDeleted(t *testing.T) {
 		t.Fatalf("the error should name what depends on it, got: %v", err)
 	}
 }
+
+// A move that commits while a pass is running must not look like a leftover.
+// The nodes are asked first and placement read afterwards, so placement is
+// never older than the reports it is compared against. Read the other way
+// round, the node found holding the slot is the new owner and the repair
+// discards the messages the move had just delivered.
+func TestReconcileReadsPlacementAfterTheNodesReport(t *testing.T) {
+	ms := []entity.Member{{ID: "node-1", Addr: "n1:9090"}, {ID: "node-2", Addr: "n2:9090"}}
+	l, d := setupWithMembers(t, ms)
+
+	// node-1 has let slot 3 go, node-2 is serving it.
+	held1 := d.nodes.EXPECT().Held(gomock.Any(), "n1:9090").Return(entity.HeldResponse{
+		NodeID: "node-1",
+		Queues: []entity.HeldSlots{{Org: "org1", Name: "orders"}},
+	}, nil)
+	held2 := d.nodes.EXPECT().Held(gomock.Any(), "n2:9090").Return(entity.HeldResponse{
+		NodeID: "node-2",
+		Queues: []entity.HeldSlots{{Org: "org1", Name: "orders", Slots: []uint16{3}}},
+	}, nil)
+
+	list := d.queues.EXPECT().ListAll(gomock.Any()).
+		Return([]entity.QueueConfig{distributedCfg()}, nil)
+	place := d.slots.EXPECT().ListByQueue(gomock.Any(), "org1", "orders").
+		Return(map[uint16]string{3: "node-2"}, nil)
+
+	gomock.InOrder(held1, held2, list, place)
+
+	// Placement and the holder agree, so nothing is repaired.
+	d.nodes.EXPECT().
+		DiscardMove(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
+
+	l.Reconcile(context.Background())
+}
+
+// The rebalancer marks a queue migrating for the length of a handoff: its slots
+// are meant to be frozen and its placement is still moving. Thawing them here
+// puts the old owner back to serving messages the new owner is about to serve
+// as well.
+func TestReconcileLeavesAMigratingQueueAlone(t *testing.T) {
+	ms := []entity.Member{{ID: "node-1", Addr: "n1:9090"}}
+	l, d := setupWithMembers(t, ms)
+
+	migrating := distributedCfg()
+	migrating.State = entity.StateMigrating
+	d.queues.EXPECT().ListAll(gomock.Any()).Return([]entity.QueueConfig{migrating}, nil)
+	d.slots.EXPECT().ListByQueue(gomock.Any(), "org1", "orders").
+		Return(map[uint16]string{3: "node-1"}, nil)
+
+	// PrepareMove has frozen slot 3; the handoff is in flight.
+	d.nodes.EXPECT().Held(gomock.Any(), "n1:9090").Return(entity.HeldResponse{
+		NodeID: "node-1",
+		Queues: []entity.HeldSlots{{
+			Org: "org1", Name: "orders", Slots: []uint16{3}, Frozen: []uint16{3},
+		}},
+	}, nil)
+
+	d.nodes.EXPECT().
+		AbortMove(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
+	d.nodes.EXPECT().
+		DiscardMove(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
+
+	l.Reconcile(context.Background())
+}

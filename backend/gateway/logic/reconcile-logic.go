@@ -13,6 +13,23 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 	if len(members) == 0 {
 		return
 	}
+
+	// Placement is read after the reports, never before: a move committing
+	// during these calls would otherwise make the new owner look like a
+	// leftover, and the repair would discard what the move just delivered.
+	type report struct {
+		member entity.Member
+		queues []entity.HeldSlots
+	}
+	reports := make([]report, 0, len(members))
+	for _, m := range members {
+		held, err := l.nodesGRPCRepo.Held(ctx, m.Addr)
+		if err != nil {
+			continue // it will be seen on a later pass
+		}
+		reports = append(reports, report{member: m, queues: held.Queues})
+	}
+
 	cfgs, err := l.queueTableRepo.ListAll(ctx)
 	if err != nil {
 		l.log.Warn("reconcile: list queues", "err", err)
@@ -23,6 +40,11 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 	owners := map[string]map[uint16]string{} // queue key -> slot -> owner
 	specs := map[string]entity.QueueSpec{}
 	for _, c := range cfgs {
+		// Mid-handoff: the slots are meant to be frozen and placement is still
+		// moving, so repairing here would fight the move.
+		if c.State != entity.StateActive {
+			continue
+		}
 		k := key(c.Org, c.Name)
 		specs[k] = c.Spec()
 		if c.Distributed {
@@ -42,12 +64,9 @@ func (l *GatewayLogic) Reconcile(ctx context.Context) {
 	}
 
 	repaired := 0
-	for _, m := range members {
-		held, err := l.nodesGRPCRepo.Held(ctx, m.Addr)
-		if err != nil {
-			continue // it will be seen on a later pass
-		}
-		for _, q := range held.Queues {
+	for _, r := range reports {
+		m := r.member
+		for _, q := range r.queues {
 			k := key(q.Org, q.Name)
 			place, known := owners[k]
 			if !known {

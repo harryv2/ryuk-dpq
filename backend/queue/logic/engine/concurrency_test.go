@@ -781,6 +781,13 @@ func TestStarvationReserveMovesLowPriorityUnderLoad(t *testing.T) {
 		}
 	}()
 
+	// Wait for the high band to fill before consuming. Started together, the
+	// consumers empty the low backlog through the ordinary path before there is
+	// any high-priority work, and the reserve has no inversion to correct.
+	for !func() bool { s := q.Stats(); return s.Ready[2] > 0 }() {
+		time.Sleep(time.Millisecond)
+	}
+
 	var lowSeen atomic.Int64
 	for c := 0; c < 4; c++ {
 		wg.Add(1)

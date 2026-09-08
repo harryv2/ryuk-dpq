@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -149,10 +150,14 @@ func TestCompactDropsDeadRecords(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		_ = w.AppendEnqueue(4, msg(string(rune('a'+i)), uint64(i)))
 	}
+	marks, err := w.Marks()
+	if err != nil {
+		t.Fatal(err)
+	}
 	live, _ := w.Replay()
 	keep := live[4][:3]
 
-	if err := w.Compact(4, keep); err != nil {
+	if err := w.Compact(4, keep, marks[4]); err != nil {
 		t.Fatal(err)
 	}
 	got, err := w.Replay()
@@ -270,4 +275,97 @@ func fileSize(t *testing.T, p string) int64 {
 		t.Fatal(err)
 	}
 	return fi.Size()
+}
+
+// Compaction runs on a timer while producers are appending. An append that
+// returned nil has been reported as durable, so it has to still be in the log
+// afterwards -- and the slot has to keep working once the swap is done.
+func TestCompactKeepsAppendsThatLandedDuringIt(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(Options{Dir: dir, Sync: SyncNever}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const slot = 0
+	var mu sync.Mutex
+	accepted := map[string]bool{}
+	var failed []error
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for p := 0; p < 4; p++ {
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				m := msg(fmt.Sprintf("p%d-%d", p, i), uint64(i))
+				err := w.AppendEnqueue(slot, m)
+				mu.Lock()
+				if err != nil {
+					failed = append(failed, err)
+				} else {
+					accepted[m.ID] = true
+				}
+				mu.Unlock()
+				time.Sleep(time.Millisecond)
+			}
+		}(p)
+	}
+
+	for i := 0; i < 12; i++ {
+		time.Sleep(5 * time.Millisecond)
+		// The mark comes before the list, the way the sweeper takes it.
+		marks, err := w.Marks()
+		if err != nil {
+			t.Fatalf("marks: %v", err)
+		}
+		mu.Lock()
+		live := make([]*engine.Message, 0, len(accepted))
+		for id := range accepted {
+			live = append(live, msg(id, 0))
+		}
+		mu.Unlock()
+		if err := w.Compact(slot, live, marks[slot]); err != nil {
+			t.Fatalf("compact: %v", err)
+		}
+	}
+	close(stop)
+	wg.Wait()
+	if err := w.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	if len(failed) > 0 {
+		t.Errorf("%d appends failed while compaction ran, first: %v", len(failed), failed[0])
+	}
+
+	w2, err := Open(Options{Dir: dir, Sync: SyncNever}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w2.Close()
+	replayed, err := w2.Replay()
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, m := range replayed[slot] {
+		have[m.ID] = true
+	}
+	missing := 0
+	for id := range accepted {
+		if !have[id] {
+			missing++
+		}
+	}
+	if missing > 0 {
+		t.Errorf("%d of %d accepted appends are not in the log after replay",
+			missing, len(accepted))
+	}
 }

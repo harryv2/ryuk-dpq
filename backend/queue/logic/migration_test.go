@@ -16,17 +16,22 @@ type fakeWAL struct {
 	engine.NoopJournal
 	enqueued  int
 	compacted []uint16
+	dropped   []uint16
 	dead      []entity.PendingDeadLetter
 	drained   []string
 }
 
 func (w *fakeWAL) AppendEnqueue(_ uint16, _ *engine.Message) error { w.enqueued++; return nil }
 func (w *fakeWAL) Replay() (map[uint16][]*engine.Message, error)   { return nil, nil }
-func (w *fakeWAL) Compact(slot uint16, _ []*engine.Message) error {
+func (w *fakeWAL) Marks() (map[uint16]int64, error)                { return nil, nil }
+func (w *fakeWAL) Compact(slot uint16, _ []*engine.Message, _ int64) error {
 	w.compacted = append(w.compacted, slot)
 	return nil
 }
-func (w *fakeWAL) Drop(uint16) error { return nil }
+func (w *fakeWAL) Drop(slot uint16) error {
+	w.dropped = append(w.dropped, slot)
+	return nil
+}
 
 func (w *fakeWAL) AppendDeadLetter(slot uint16, m *engine.Message) error {
 	w.dead = append(w.dead, entity.PendingDeadLetter{Slot: slot, Msg: m})

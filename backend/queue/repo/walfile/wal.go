@@ -278,9 +278,59 @@ func (w *WAL) replaySlot(id uint16) ([]*engine.Message, error) {
 	return msgs, nil
 }
 
+// Marks reports where each slot's log currently ends.
+func (w *WAL) Marks() (map[uint16]int64, error) {
+	entries, err := os.ReadDir(w.opts.Dir)
+	if os.IsNotExist(err) {
+		return map[uint16]int64{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint16]int64, len(entries))
+	for _, e := range entries {
+		id, ok := slotFromName(e.Name())
+		if !ok {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		out[id] = info.Size()
+	}
+	return out, nil
+}
+
+func copyTail(path string, from int64, dst io.Writer) error {
+	src, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	info, err := src.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() <= from {
+		return nil
+	}
+	if _, err := src.Seek(from, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, src)
+	return err
+}
+
 // Compact rewrites a slot's log to hold only what is still live, which is what
-// keeps the file from growing forever.
-func (w *WAL) Compact(id uint16, msgs []*engine.Message) error {
+// keeps the file from growing forever. Records written past from are carried
+// across rather than dropped: they were reported durable. Replay is keyed by
+// message id, so one described both ways is applied twice, not duplicated.
+func (w *WAL) Compact(id uint16, msgs []*engine.Message, from int64) error {
 	tmp := w.path(id) + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {
@@ -304,22 +354,45 @@ func (w *WAL) Compact(id uint16, msgs []*engine.Message) error {
 			}
 		}
 	}
+
+	// Held across the copy and the swap. Letting go first lets an append reopen
+	// the path and write to the file about to be replaced, losing the record and
+	// leaving the map holding a handle nothing can read back.
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	sf, held := w.slots[id]
+	if held {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+	}
+
+	if err := copyTail(w.path(id), from, f); err != nil {
+		f.Close()
+		return err
+	}
 	if err := f.Sync(); err != nil {
 		f.Close()
 		return err
 	}
-	f.Close()
-
-	w.mu.Lock()
-	if sf, ok := w.slots[id]; ok {
-		sf.mu.Lock()
-		sf.f.Close()
-		delete(w.slots, id)
-		sf.mu.Unlock()
+	if err := f.Close(); err != nil {
+		return err
 	}
-	w.mu.Unlock()
-
-	return os.Rename(tmp, w.path(id))
+	if err := os.Rename(tmp, w.path(id)); err != nil {
+		return err
+	}
+	if !held {
+		return nil
+	}
+	// Reopened rather than dropped: an appender already holding this slotFile
+	// would otherwise write to a closed file.
+	next, err := os.OpenFile(w.path(id), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	_ = sf.f.Close()
+	sf.f = next
+	return nil
 }
 
 // Drop removes a slot's log entirely, used when a slot is handed to another node.

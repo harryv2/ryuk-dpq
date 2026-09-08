@@ -86,6 +86,7 @@ func (s *slot) nack(
 func (s *slot) sweepTTL(now time.Time) int {
 	n := 0
 	for _, g := range s.groups {
+		dropped := 0
 		for {
 			m, ok := g.msgs.front()
 			if !ok || !m.expired(now) {
@@ -93,7 +94,15 @@ func (s *slot) sweepTTL(now time.Time) int {
 			}
 			g.msgs.popFront()
 			s.dropExpired(m)
+			dropped++
 			n++
+		}
+		// A group is listed in the band of its head. That head is gone, so the
+		// entry names a priority the group no longer has and the next message
+		// would be served at the expired one's band.
+		if dropped > 0 && g.inBand {
+			g.version++
+			g.inBand = false
 		}
 		if !g.inBand && !g.locked && !g.msgs.empty() {
 			s.pushGroup(g)
