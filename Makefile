@@ -131,6 +131,12 @@ MESSAGES ?= 150
 seed:
 	go run ./backend/tests/seed -queues $(QUEUES) -messages $(MESSAGES) $(if $(RESET),-reset,)
 
+# One queue, ten thousand messages, priorities spread over the whole scale. The
+# queue name and the count live in the command. make seedMessages RESET=1
+# empties it first.
+seedMessages:
+	go run ./backend/tests/seedmessages $(if $(RESET),-reset,)
+
 # make integration-tags TAGS=@failure
 integration-tags:
 	cd integration && RYUK_IT_TAGS=$(TAGS) go test -v -timeout 25m
