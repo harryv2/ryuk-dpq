@@ -65,10 +65,9 @@ type Queue struct {
 	slots     map[uint16]*slot
 	localView atomic.Pointer[[]*slot]
 
-	generation  uint64
 	incarnation uint64
 
-	counter  atomic.Uint64
+	seq      atomic.Uint64
 	dispatch atomic.Uint64
 	rr       atomic.Uint64
 	cursor   atomic.Uint32
@@ -92,9 +91,9 @@ func New(cfg Config, clk Clock, j Journal, generation uint64) *Queue {
 		clock:       clk,
 		journal:     j,
 		slots:       make(map[uint16]*slot),
-		generation:  generation,
 		incarnation: j.Incarnation(),
 	}
+	q.seq.Store(generation << generationShift)
 	q.conf.Store(&cfg)
 	empty := []*slot{}
 	q.localView.Store(&empty)
@@ -103,13 +102,17 @@ func New(cfg Config, clk Clock, j Journal, generation uint64) *Queue {
 
 func (q *Queue) cfg() *Config        { return q.conf.Load() }
 func (q *Queue) Config() Config      { return *q.conf.Load() }
-func (q *Queue) Generation() uint64  { return q.generation }
+func (q *Queue) Generation() uint64  { return q.seq.Load() >> generationShift }
 func (q *Queue) Incarnation() uint64 { return q.incarnation }
 
 // Reconfigure swaps the settings of a running queue.
 func (q *Queue) Reconfigure(c Config) bool {
 	cur := q.conf.Load()
-	c.Key, c.Distributed = cur.Key, cur.Distributed
+	c.Key = cur.Key
+	// The shape decides the slot count, so it is fixed for a queue's life and
+	// the API refuses to change it. It can still be learned: a queue rebuilt
+	// from its log has no shape until the first request names one.
+	c.Distributed = cur.Distributed || c.Distributed
 	c.applyDefaults()
 	if c == *cur {
 		return false
@@ -122,10 +125,27 @@ func (q *Queue) Reconfigure(c Config) bool {
 // to keep resolving to the same slot.
 func (q *Queue) slotCount() int { return SlotCountFor(q.cfg().Distributed) }
 
+// generationShift splits a sequence number: ownership generation above,
+// message counter below.
+const generationShift = 40
+
 // nextSeq prefixes the counter with the ownership generation, so two owners
 // never hand out overlapping values and an older owner's messages sort first.
-func (q *Queue) nextSeq() uint64 {
-	return (q.generation << 40) | (q.counter.Add(1) & (1<<40 - 1))
+func (q *Queue) nextSeq() uint64 { return q.seq.Add(1) }
+
+// adoptSeq keeps the next sequence number above seq. Messages arriving from a
+// log or another owner keep the numbering they were given, so new arrivals have
+// to continue past it rather than start again underneath and sort ahead.
+func (q *Queue) adoptSeq(seq uint64) {
+	for {
+		cur := q.seq.Load()
+		if seq <= cur {
+			return
+		}
+		if q.seq.CompareAndSwap(cur, seq) {
+			return
+		}
+	}
 }
 
 func (q *Queue) slot(id uint16) *slot {
@@ -492,12 +512,16 @@ func (q *Queue) HeldSlots() []uint16 {
 func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 	now := q.clock.Now()
 	var added int64
+	var maxSeq uint64
 
 	for slotID, msgs := range bySlot {
 		if len(msgs) == 0 {
 			continue
 		}
 		sort.Slice(msgs, func(i, j int) bool { return msgs[i].Seq < msgs[j].Seq })
+		if last := msgs[len(msgs)-1].Seq; last > maxSeq {
+			maxSeq = last
+		}
 
 		byGroup := make(map[string][]*Message)
 		var delayed []*Message
@@ -539,6 +563,7 @@ func (q *Queue) Absorb(bySlot map[uint16][]*Message) error {
 		added += int64(len(msgs))
 	}
 
+	q.adoptSeq(maxSeq)
 	q.depth.Add(added)
 	return nil
 }

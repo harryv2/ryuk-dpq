@@ -467,3 +467,54 @@ func TestConcurrentEnqueuesShareAFlush(t *testing.T) {
 	}
 	t.Logf("%d appends cost %d flushes (%.1f per flush)", total, got, float64(total)/float64(got))
 }
+
+// Sequence numbers are generation-prefixed, so they are large. Replay and
+// compaction both have to hand back the exact value.
+func TestSequenceNumbersSurviveDisk(t *testing.T) {
+	w, _ := openTemp(t)
+
+	want := []uint64{
+		1,
+		1<<40 | 1,
+		7<<40 | 999999,
+		1<<63 | 1, // a generation far past anything real
+		^uint64(0) - 1,
+	}
+	for i, seq := range want {
+		m := msg(string(rune('a'+i)), seq)
+		if err := w.AppendEnqueue(3, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := w.Replay()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got[3]) != len(want) {
+		t.Fatalf("replayed %d of %d", len(got[3]), len(want))
+	}
+	for i, m := range got[3] {
+		if m.Seq != want[i] {
+			t.Errorf("replay: seq %d came back as %d", want[i], m.Seq)
+		}
+	}
+
+	// and again through a compaction, which rewrites every record
+	marks, err := w.Marks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Compact(3, got[3], marks[3]); err != nil {
+		t.Fatal(err)
+	}
+	got2, err := w.Replay()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range got2[3] {
+		if m.Seq != want[i] {
+			t.Errorf("compact: seq %d came back as %d", want[i], m.Seq)
+		}
+	}
+}
