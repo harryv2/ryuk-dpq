@@ -1,5 +1,5 @@
-// Command seedmessages fills one queue with messages of mixed priority, so
-// priority ordering and the metric bands have a real backlog to work on.
+// Command seedmessages fills a set of queues with messages of mixed priority,
+// so priority ordering and the metric bands have a real backlog to work on.
 package main
 
 import (
@@ -16,19 +16,20 @@ import (
 	"time"
 )
 
-// The queue and the count are fixed here rather than passed in: this command
+// The queues and the count are fixed here rather than passed in: this command
 // does one thing.
 const (
-	queueName = "orders_2"
-	total     = 100000
+	queuePrefix = "orders"
+	queueCount  = 2
+	perQueue    = 10000
 )
 
 var (
-	addr        = flag.String("addr", "http://localhost:8090", "gateway address")
+	addr        = flag.String("addr", "http://localhost:8080", "gateway address")
 	token       = flag.String("token", "acme-token", "bearer token, which picks the tenant")
-	concurrency = flag.Int("concurrency", 24, "parallel requests")
+	concurrency = flag.Int("concurrency", 7, "parallel requests")
 	seed        = flag.Int64("seed", 1, "random seed, so a run is repeatable")
-	reset       = flag.Bool("reset", false, "delete the queue first")
+	reset       = flag.Bool("reset", false, "delete the queues first")
 )
 
 type client struct {
@@ -57,6 +58,14 @@ func (c *client) do(method, path string, body any) (int, []byte) {
 	return resp.StatusCode, out
 }
 
+func queueNames() []string {
+	out := make([]string, queueCount)
+	for i := range out {
+		out[i] = fmt.Sprintf("%s_%d", queuePrefix, i+1)
+	}
+	return out
+}
+
 func main() {
 	flag.Parse()
 	rnd := rand.New(rand.NewSource(*seed))
@@ -68,34 +77,71 @@ func main() {
 		fmt.Fprintf(os.Stderr, "cannot reach the gateway at %s — is it running? (make up)\n", *addr)
 		os.Exit(1)
 	}
-	if *reset {
-		c.do("DELETE", "/v1/queues/"+queueName, nil)
-	}
-	code, out := c.do("POST", "/v1/queues", map[string]any{
-		"name":              queueName,
-		"visibilityTimeout": "45s",
-		"maxRetries":        3,
-		"defaultTtl":        "6h",
-		"distributed":       true,
-		"placementWidth":    20,
-	})
-	// 409 is a queue that already exists with settings of its own. Fill it as it
-	// stands rather than insisting on these.
-	if code != 201 && code != 200 && code != 409 {
-		fmt.Fprintf(os.Stderr, "create %q failed (%d): %s\n", queueName, code, out)
-		os.Exit(1)
+
+	names := queueNames()
+	fmt.Printf("%d queues x %d messages = %d\n\n", queueCount, perQueue, queueCount*perQueue)
+
+	var totalSent, totalFailed atomic.Int64
+	var totalBands [3]atomic.Int64
+	start := time.Now()
+
+	for _, name := range names {
+		if *reset {
+			c.do("DELETE", "/v1/queues/"+name, nil)
+		}
+		code, out := c.do("POST", "/v1/queues", map[string]any{
+			"name":              name,
+			"visibilityTimeout": "45s",
+			"maxRetries":        3,
+			"defaultTtl":        "6h",
+			"distributed":       true,
+			"placementWidth":    20,
+		})
+		// 409 is a queue that already exists with settings of its own. Fill it as
+		// it stands rather than insisting on these.
+		if code != 201 && code != 200 && code != 409 {
+			fmt.Fprintf(os.Stderr, "create %q failed (%d): %s\n", name, code, out)
+			os.Exit(1)
+		}
+		sent, failed, bands, took := fill(c, name, rnd)
+
+		totalSent.Add(sent)
+		totalFailed.Add(failed)
+		for i, n := range bands {
+			totalBands[i].Add(n)
+		}
+		line := fmt.Sprintf("  %-12s %6d sent  %5.0f/s  high %d  medium %d  low %d",
+			name, sent, float64(sent)/took.Seconds(), bands[2], bands[1], bands[0])
+		if failed > 0 {
+			line += fmt.Sprintf("  refused %d", failed)
+		}
+		fmt.Println(line)
 	}
 
+	elapsed := time.Since(start)
+	fmt.Printf("\nsent      %d of %d in %s (%.0f/s)\n",
+		totalSent.Load(), queueCount*perQueue, elapsed.Round(time.Millisecond),
+		float64(totalSent.Load())/elapsed.Seconds())
+	if n := totalFailed.Load(); n > 0 {
+		fmt.Printf("refused   %d\n", n)
+	}
+	fmt.Printf("high      %d\nmedium    %d\nlow       %d\n",
+		totalBands[2].Load(), totalBands[1].Load(), totalBands[0].Load())
+	fmt.Printf("\nopen %s\n", *addr)
+}
+
+// fill sends perQueue messages into one queue and reports what landed.
+func fill(c *client, name string, rnd *rand.Rand) (sent, failed int64, bands [3]int64, took time.Duration) {
 	work := make(chan int, *concurrency)
 	go func() {
-		for i := 0; i < total; i++ {
+		for i := 0; i < perQueue; i++ {
 			work <- i
 		}
 		close(work)
 	}()
 
-	var sent, failed atomic.Int64
-	var bands [3]atomic.Int64
+	var ok, bad atomic.Int64
+	var counted [3]atomic.Int64
 
 	start := time.Now()
 	var wg sync.WaitGroup
@@ -106,33 +152,25 @@ func main() {
 			r := rand.New(rand.NewSource(rnd.Int63()))
 			for i := range work {
 				p := r.Intn(101)
-				code, _ := c.do("POST", "/v1/queues/"+queueName+"/messages", map[string]any{
+				code, _ := c.do("POST", "/v1/queues/"+name+"/messages", map[string]any{
 					"payload":  fmt.Sprintf("message_%d_%d", p, i+1),
 					"priority": p,
 				})
 				if code != 201 {
-					failed.Add(1)
+					bad.Add(1)
 					continue
 				}
-				sent.Add(1)
-				bands[bucket(p)].Add(1)
+				ok.Add(1)
+				counted[bucket(p)].Add(1)
 			}
 		}()
 	}
 	wg.Wait()
-	elapsed := time.Since(start)
 
-	fmt.Printf("queue     %s\n", queueName)
-	fmt.Printf("sent      %d of %d in %s (%.0f/s)\n",
-		sent.Load(), total, elapsed.Round(time.Millisecond),
-		float64(sent.Load())/elapsed.Seconds())
-	if n := failed.Load(); n > 0 {
-		fmt.Printf("refused   %d\n", n)
+	for i := range counted {
+		bands[i] = counted[i].Load()
 	}
-	fmt.Printf("high      %d\n", bands[2].Load())
-	fmt.Printf("medium    %d\n", bands[1].Load())
-	fmt.Printf("low       %d\n", bands[0].Load())
-	fmt.Printf("\nopen %s\n", *addr)
+	return ok.Load(), bad.Load(), bands, time.Since(start)
 }
 
 // bucket is the same split the queue reports its counts in.
